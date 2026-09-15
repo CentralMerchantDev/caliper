@@ -33,6 +33,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import * as acorn from "acorn";
+import { stripSourceComments, stripHtmlComments } from "./stripSourceComments.ts";
 
 // The suite bundles each test into test/.built/, so import.meta.url points
 // there, not at the source. Walk up until the repo root is actually found
@@ -436,6 +437,57 @@ test("no renderer module reads a const or let before it is declared", () => {
   );
 });
 
+/**
+ * The real logic, text-in so it is testable against hand-built strings.
+ * A COUNT comparison, not presence/absence -- a comment anywhere in the
+ * file mentioning `logarithmicDepthBuffer: true` (explaining the option,
+ * or showing what a second renderer used to have before a regression
+ * removed it) would inflate `flagged` without inflating `constructions`,
+ * so a real second construction that lost its real flag could still pass
+ * if a comment elsewhere in the file happens to mention the phrase.
+ * Comments stripped first so only real code can be counted on either side.
+ */
+function countRendererLogDepthGap(rawSrc: string): { constructions: number; flagged: number } {
+  const src = stripHtmlComments(stripSourceComments(rawSrc));
+  const constructions = (src.match(/new THREE\.WebGLRenderer\(/g) || []).length;
+  const flagged = (src.match(/logarithmicDepthBuffer:\s*true/g) || []).length;
+  return { constructions, flagged };
+}
+
+// --- rawSourceScan's own gap, closed: this count comparison matched raw
+// text with no comment stripping. See test/rawSourceScan.test.ts's own
+// history (2026-09-11).
+
+test("(synthetic) the vulnerability: a comment mentioning logarithmicDepthBuffer must not mask a real construction missing the real flag", () => {
+  const bad =
+    "const a = new THREE.WebGLRenderer({ antialias: true });\n" +
+    "// a second renderer used to have logarithmicDepthBuffer: true here before a regression removed it\n";
+  const { constructions, flagged } = countRendererLogDepthGap(bad);
+  assert.ok(flagged < constructions, `a comment mention was counted as a real flag -- constructions=${constructions}, flagged=${flagged}`);
+});
+
+test("(synthetic) a genuinely correct file -- real flag on the one real construction, no phantom comment -- still reports clean after stripping", () => {
+  const good =
+    "// logarithmicDepthBuffer explained here for context\n" +
+    "const a = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });\n";
+  const { constructions, flagged } = countRendererLogDepthGap(good);
+  assert.equal(constructions, 1);
+  assert.equal(flagged, 1);
+});
+
+test("(synthetic, GATE static): the real logarithmic-depth-buffer test is actually wired to countRendererLogDepthGap, not just testing the helper in isolation", () => {
+  // Not fileURLToPath(import.meta.url) -- test/run.mjs bundles this file
+  // before running it, so that would resolve to the BUILT .mjs output, not
+  // this source file's real text. PUBLIC is public/ under the repo root,
+  // so its parent is the repo root's own test/ directory's sibling.
+  const thisFileSrc = stripSourceComments(readFileSync(join(dirname(PUBLIC), "test", "rendererStatic.test.ts"), "utf8"));
+  assert.match(
+    thisFileSrc,
+    /const \{ constructions, flagged \} = countRendererLogDepthGap\(rawSrc\);/,
+    "the real per-file check no longer visibly calls countRendererLogDepthGap -- the fix may have been reverted or bypassed",
+  );
+});
+
 test("every WebGLRenderer asks for a logarithmic depth buffer", () => {
   // A ONE-WORD DELETION HERE LOOKS LIKE NOTHING AND UNDOES THE WHOLE FIX.
   //
@@ -467,11 +519,10 @@ test("every WebGLRenderer asks for a logarithmic depth buffer", () => {
   const files = ["world-render-3d.js", "city.html"];
   const failures: string[] = [];
   for (const file of files) {
-    const src = readFileSync(join(PUBLIC, file), "utf8");
+    const rawSrc = readFileSync(join(PUBLIC, file), "utf8");
     // Count constructions, not occurrences of the flag: a file could gain a
     // second renderer that quietly lacks it while the first still has it.
-    const constructions = (src.match(/new THREE\.WebGLRenderer\(/g) || []).length;
-    const flagged = (src.match(/logarithmicDepthBuffer:\s*true/g) || []).length;
+    const { constructions, flagged } = countRendererLogDepthGap(rawSrc);
     if (constructions === 0) {
       failures.push(`${file}: constructs no WebGLRenderer at all — has the renderer moved?`);
     } else if (flagged < constructions) {

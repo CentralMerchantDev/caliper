@@ -1,0 +1,25 @@
+Record F1's real state in docs/CROSS-LANE-REQUESTS.md so nobody
+re-investigates it from scratch next run -- it cannot be closed by either
+lane alone
+
+What was recorded: F1's gate (distinct facade materials reachable from
+real placements, well above four) is not a "waiting on the other lane"
+state, it is a "no single branch has both halves" state. The 16 real
+variants and their gate test (test/facadeVariants.test.ts) live on
+codex-lane; the one-line variantSeed wiring into getFacadeMaterial lives
+on b1-land (public/city-render.js:1934). Re-checking this worktree again
+will keep finding the same absence, correctly, forever, until a merge --
+not because the work is undone, but because this branch structurally
+cannot contain both sides.
+
+Re-measured today, same result as RUN2/RUN3/RUN4: `node test/run.mjs
+facadeVariants.test.ts` -- "facade materials reachable from real
+placements today: 4 (interwar-vc-day-, postwar-vc-day-, heritage-vc-day-,
+contemporary-vc-day-)", 14 pass, 0 fail, 1 honest todo. `grep -n
+"variantSeed" public/city-render.js` in this worktree finds nothing.
+
+What is still open: the resolution is a b1-land -> codex-lane merge, which
+is Mark's to authorise at a clean stop, not either lane's to do unattended.
+Mark has been told this directly. This commit only makes that state
+readable from this branch's own docs, so a future run does not re-spend a
+session re-discovering it.

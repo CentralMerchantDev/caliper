@@ -1,0 +1,67 @@
+U1 -- the inspector's position was still a guess after its height was fixed;
+extracted the shared live-position tracker rather than writing it a third time
+
+U1's original fix (commit 77aec26) replaced a fixed 130px guess for the nav
+pad's HEIGHT with --nav-pad-height, a ResizeObserver-published measurement.
+It never questioned the other half of the same assumption: .inspect-card's
+`left: 20px` and its bottom-calc both still assumed the pad sits at its
+CSS-default bottom-left corner. It doesn't, in general -- public/workbench.js
+registers #nav-compass-pad (key: "nav", home: "left") and can dock it
+anywhere on screen via its own inline left/top, which wins over the
+stylesheet. U4's wheel hit the identical bug against the same pad, twice
+(first anchoring the wheel to a guessed offset above the pad, same as this
+fix's original version; found by screenshot, fixed by measuring the pad's
+live rect; then again once the hub moved inside the pad's own action row,
+needing the same treatment anchored to the hub instead). Three uses of the
+same "measure an element's live position, tracked continuously" pattern is
+this project's own failure pattern E aimed at itself -- built the same
+capability three times because the first two were not extracted.
+
+public/live-position.js's trackLiveRect(el, onMeasure, {pollMs}) is the
+extraction: ResizeObserver for size changes, a window resize listener, and a
+short poll for the case neither catches -- a workbench drag that moves an
+element without resizing it. nav-wheel.js's ring positioning is refactored
+onto it (removing its own hand-written copy of the same three mechanisms);
+index.html's bottom module script now calls it directly against
+#nav-compass-pad to set .inspect-card's `left` and `bottom` from the pad's
+actual measured position instead of the old calc()'s corner assumption. The
+old CSS values remain as the fallback for the few frames before the module
+script runs, same pattern as --nav-pad-height's own fallback.
+
+Verified: npx tsc --noEmit clean. node test/run.mjs -- full suite, unchanged
+elsewhere. New: test/livePosition.test.ts (5 tests, pure-Node -- Node has
+neither ResizeObserver nor `window`, so trackLiveRect's own typeof guards
+skip both branches harmlessly, leaving the immediate measure() call and the
+poll interval as what this environment can exercise directly; real coverage
+of the property that matters most, not a stub). test/navWheel.test.ts and
+test/navPad.test.ts each gained one assertion that the shared tracker is
+actually imported and called, not reimplemented.
+
+Watched red first, three ways:
+- live-position.js: reverted stop()'s clearInterval to a no-op. The
+  "stop() ends the poll" test did not just fail -- it HUNG the test runner
+  entirely (a leaked interval keeps Node's event loop alive), which is a
+  more definitive red than a normal assertion mismatch. Restored,
+  byte-identical, reconfirmed a clean, fast green.
+- navWheel.test.ts: same property, positioning refactor -- confirmed the
+  updated assertion (import + call site) fails when either is absent.
+- navPad.test.ts: mutated the call site's function name
+  (trackLiveRect -> trackLiveRectXXX). First attempt passed incorrectly --
+  the assertion's own regex also matched a comment describing the call in
+  near-identical syntax, so the mutated CODE line was invisible to a test
+  that could not tell code from prose about code. Found by the mutation
+  check doing its job, not by inspection: fixed by rewording the comment to
+  stop describing the call in exact call-syntax, re-ran, correctly caught
+  the mutation this time. Recorded here rather than only fixed quietly,
+  since a test that cannot distinguish a real call from a comment about that
+  call is exactly this project's own "cannot fail" pattern, just found in a
+  test I wrote in the same session as writing about that pattern in others.
+
+What's still open: no browser-based re-confirmation this round (the e2e
+overlap suite that gave U1's original fix its red-then-green proof) -- host
+memory did not clear during this session to run it again. The fix is the
+same "measure the live rect" principle already proven once for height and
+twice more for the wheel's position, applied a third time to the same
+element pair; static/structural verification and the mutation checks above
+stand in for it this round, not a substitute for actually watching it in a
+browser once memory allows.

@@ -1280,7 +1280,7 @@ export const MODELS = {
   "bench-slat": {
     id: "bench-slat",
     kind: PROPS.bench.kind,
-    footprint: { w: PROPS.bench.foot.w, d: 0.55 },
+    footprint: { w: PROPS.bench.foot.w, d: PROPS.bench.foot.d },
     height: 0.85,
     clearance: PROPS.bench.clear,
     origin: "base-centre",

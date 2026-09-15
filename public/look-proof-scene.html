@@ -1,0 +1,1054 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CALIPER — look-proof scene</title>
+<meta name="description" content="Five real CC0 pieces, one shared material, fixed camera. Not a product page -- docs/briefs/BLD-2026-09-14-look-proof.md's own proof scene.">
+<style>
+  html, body { margin: 0; height: 100%; background: #0b1016; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<!-- A way back, same anchor kit-contact-sheet.html/kitbash-*.html already
+     use -- reachability.test.ts's own gate: no page here may be reachable
+     only forward. -->
+<a href="./index.html" class="back-to-caliper" aria-label="Back to CALIPER"
+   style="position:fixed;top:14px;left:14px;z-index:9999;display:inline-flex;align-items:center;gap:7px;
+          padding:7px 13px;border-radius:11px;text-decoration:none;font:600 12px/1 system-ui,sans-serif;
+          letter-spacing:.02em;color:#e8e4de;background:rgba(22,20,18,.82);border:1px solid rgba(255,255,255,.16);
+          backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 6px 20px rgba(0,0,0,.4)">
+  <span aria-hidden="true">&#8592;</span> CALIPER
+</a>
+<script type="importmap">
+{"imports":{"three":"./vendor/three/three.module.min.js"}}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { mergeGeometries } from "./vendor/three/addons/utils/BufferGeometryUtils.js";
+import { createLookProofMaterial, LIGHT_DIR } from "./look-proof-material.js";
+import { PIECES as ALL_PIECES, LAYOUT_BOUNDS, GROUND as GROUND_FULL, loadPieceGeometry, fitToFootprint } from "./look-proof-pieces.js";
+import { createAreaBoard } from "./area-board.js";
+import { createPlacementSession, loadBoard } from "./placement.js";
+import { resolveBoardPieces, resolveGhost, resolveReadout, anchorForCell, rotateGeometryY, MODULE_SIZE_M } from "./board-renderer.js";
+import { cellFromWorldXZ, handleHover, handleClick, handleCancel } from "./pointer-interaction.js";
+// RB3 -- a NAMESPACE import (`import * as`), not `import { valueAt,
+// valueIfPlaced }`. A named import of an export that does not exist
+// throws at parse time and would crash every OTHER mode this file
+// already ships (RB1/RB2 included) the moment this line loads -- a
+// namespace import never fails for a missing individual name; a missing
+// export just reads as `undefined` on the object, which resolveReadout
+// (board-renderer.js) already checks for and reports honestly.
+import * as ScoringModule from "./scoring.js";
+
+// N1 -- "the same fixed camera as 08" (docs/briefs/BLD-2026-09-15.md).
+// Mark judged 08-cast-shadows.png, not 09-piece-count-20.png ("09 was
+// correctly read as a throughput instrument and discounted") -- so N1's
+// own before/after pairs need EXACTLY that shot's camera and piece
+// composition, not L12's wide 20-piece site-plan view. `?hero=1` selects
+// it: the same four pieces, in the same order, at the exact anchors and
+// camera 08 used, computed once here rather than re-derived from
+// layoutPieces (which starts every layout at cursor (0,0) and would
+// shift every anchor by a constant, changing nothing about the
+// COMPOSITION but breaking pixel continuity with the committed 01-08
+// sequence for no reason).
+const HERO_MODE = new URLSearchParams(window.location.search).has("hero");
+const HERO_IDS = ["house-2x3", "street-tile-4wide", "midrise-4x4", "tower-base-6x6"];
+const HERO_ANCHORS = { "house-2x3": [-26, 0], "street-tile-4wide": [-16, 0], "midrise-4x4": [2, 0], "tower-base-6x6": [20, 0] };
+const HERO_GROUND = { footprint: [90, 60], anchor: [-30, -14], layer: GROUND_FULL.layer };
+
+// N1c -- "something at street level ... kerbs, a path, one or two props"
+// (docs/briefs/BLD-2026-09-15.md). ADDITIVE to HERO_IDS's own four --
+// HERO_IDS itself stays exactly what it was for N1a (the composition
+// test above still matches its own literal array), this is loaded and
+// merged alongside it, not instead of it.
+//
+// ATTEMPT 1 placed TWO props: street-lamp-1x1 beside the tower's east
+// wall (x=44, outside this camera's own view), and light-square.glb
+// itself rendered as an unlabelled white abstract shape once loaded --
+// found by looking at test-street.png, not assumed. Cutting to ONE
+// (still satisfies the brief's own "one or two") removes both problems
+// at once rather than debugging an asset whose read is ambiguous even
+// once correctly placed. dumpster-1x1's own anchor was ALSO wrong on
+// attempt 1 (behind the tower in camera depth, not in front -- occluded,
+// confirmed absent in a cropped re-check of the render) -- moved from
+// the tower's south-WEST corner to its south, in the open ground nearer
+// the camera than the tower's own near face (z=24), unoccluded.
+const HERO_PROP_IDS = ["dumpster-1x1"];
+const HERO_PROP_ANCHORS = {
+  "dumpster-1x1": [20, 26],
+};
+
+// RB1 -- "A board renderer: draw a real area board, not a hardcoded list"
+// (docs/specs/REBUILD-CHECKLIST.md, THE CONVERGENCE). `?board=1` selects a
+// mode with NO piece list of its own at all -- PIECES below is empty in
+// this mode, and every piece rendered comes from board-renderer.js's own
+// resolveBoardPieces(), reading a REAL createAreaBoard() this file places
+// pieces into via the real board.place()/board.remove() (public/area-
+// board.js), never a literal array. `?board=1&removeId=<id>` re-runs the
+// SAME placement sequence and then calls board.remove(id) before
+// rendering -- the gate's own "place, render, remove, render, and the two
+// shots disagree exactly where the removed piece was" evidence, from one
+// script, one page, one real board's own state transition, not two
+// independently-scripted renders that could silently diverge from each
+// other.
+const BOARD_MODE = new URLSearchParams(window.location.search).has("board");
+const BOARD_REMOVE_ID = (() => {
+  const raw = new URLSearchParams(window.location.search).get("removeId");
+  const n = raw === null ? null : Number(raw);
+  return Number.isInteger(n) ? n : null;
+})();
+const BOARD_WIDTH_CELLS = 24;
+const BOARD_HEIGHT_CELLS = 16;
+// A small, varied demo: two building categories BO7A bound (residential,
+// landmark), one road tile, and one CLI-commercial-kit landmark -- real
+// glb-bound catalogue ids, not invented ones (scripts/link-catalogue-
+// meshes.mjs's own MESH_BINDINGS names all four).
+const BOARD_DEMO_PLACEMENTS = [
+  { typeId: "house-a", anchorCell: { x: 2, y: 2 }, rotation: 0 },
+  { typeId: "tower-base-6x6-a", anchorCell: { x: 8, y: 2 }, rotation: 0 },
+  { typeId: "street-straight", anchorCell: { x: 2, y: 10 }, rotation: 0 },
+  { typeId: "mega-tower-a", anchorCell: { x: 15, y: 2 }, rotation: 0 },
+];
+const BOARD_GROUND = {
+  footprint: [BOARD_WIDTH_CELLS * 4 + 16, BOARD_HEIGHT_CELLS * 4 + 16],
+  anchor: [-8, -8],
+  layer: GROUND_FULL.layer,
+};
+
+// RB2 -- "The ghost, and an invalid one that reads as invalid"
+// (docs/specs/REBUILD-CHECKLIST.md, THE CONVERGENCE). `placement.js`
+// already has the ghost (Tier 1) -- this renders it. `?board=1&ghost=valid`
+// previews a real, empty, in-bounds cell; `?board=1&ghost=invalid` previews
+// the SAME cell BOARD_DEMO_PLACEMENTS's own house-a already occupies, so
+// the refusal is a real "occupied" verdict from the real board, not staged.
+// Reads `session.getGhost()`'s own `valid`/`reason` VERBATIM (via
+// board-renderer.js's resolveGhost) rather than re-deciding anything here.
+const GHOST_MODE = new URLSearchParams(window.location.search).get("ghost"); // "valid" | "invalid" | null
+const GHOST_DEMO = {
+  valid: { typeId: "house-a", anchorCell: { x: 2, y: 6 }, rotation: 0 }, // empty cell
+  invalid: { typeId: "tower-base-6x6-a", anchorCell: { x: 2, y: 2 }, rotation: 0 }, // house-a already sits here
+};
+const GHOST_COLOR = { valid: 0x4caf50, invalid: 0xe53935 }; // visibly distinct: green vs red
+
+// RB3/RC5 -- THE VALUE READOUT, reassigned from CLI's S5 (docs/specs/
+// REBUILD-CHECKLIST.md, THE CONVERGENCE: "S5 sat in CLI's list marked
+// blocked because no render surface existed. RB1 creates one, and a
+// readout is a view concern. So it moves to the lane that owns the
+// view."). `?board=1&readout=x,y` previews a cell's own value() reading
+// via resolveReadout (board-renderer.js), which calls CLI's own real
+// valueAt/valueIfPlaced through the dynamically-checked ScoringModule
+// namespace -- never a value computed here.
+// RC5 -- S4 LANDED, 2026-09-15: `origin/scoring` merged into `origin/main`
+// with Mark's own authorisation (`ADR-020`, logged in `EVENT-LOG.jsonl`),
+// then merged into this branch. valueAt/valueIfPlaced are real now --
+// this mode renders REAL current/ifPlaced numbers via resolveReadout,
+// never a guessed or stubbed one. The "unavailable" path (READOUT_COLOR
+// .unavailable, resolveReadout's own honest fallback) stays wired for
+// exactly the reason it was built: if a future scoring change ever
+// removes or renames these exports again, this renders the true state
+// instead of crashing or silently showing a stale number.
+const READOUT_MODE = new URLSearchParams(window.location.search).get("readout"); // "x,y" | null
+const READOUT_CELL = (() => {
+  if (!READOUT_MODE) return null;
+  const [x, y] = READOUT_MODE.split(",").map(Number);
+  return Number.isInteger(x) && Number.isInteger(y) ? { x, y } : null;
+})();
+const READOUT_CANDIDATE_TYPE_ID = "house-a"; // an arbitrary, real, glb-bound typeId to preview "if placed" with
+const READOUT_COLOR = { available: 0x2196f3, unavailable: 0x9e9e9e }; // blue once real (now the common case); neutral grey only if scoring ever becomes unavailable again
+
+// RB4 -- "Still there on reload" (docs/specs/REBUILD-CHECKLIST.md, THE
+// CONVERGENCE). `?board=1&reload=1` places the SAME BOARD_DEMO_PLACEMENTS
+// as every other board=1 render, then serializes the real session
+// (public/placement.js's own C2.5 save shape) and reloads it into a
+// FRESH board via the real loadBoard() -- the render pipeline downstream
+// (resolveBoardPieces, the ground decal, the merge) then runs against
+// the RELOADED board, not the original one. The gate is exactly this
+// file's own before/after discipline: `19-reload.png` must be
+// byte-identical to `14-board.png`, proving the round trip lost, moved,
+// or silently dropped nothing.
+const RELOAD_MODE = new URLSearchParams(window.location.search).has("reload");
+// `?reloadShrink=1` reloads into a DELIBERATELY narrower board (20 cells,
+// not 24) so mega-tower-a's own anchor (x=15, an 8-module footprint,
+// spanning x:15-23) no longer fits -- a real out-of-bounds refusal from
+// the real board, proving loadBoard()'s own `failures` are genuinely
+// surfaced rather than an empty list that was never actually exercised.
+const RELOAD_SHRINK = new URLSearchParams(window.location.search).has("reloadShrink");
+
+// RC1 -- "MAKE IT PLAYABLE" (docs/specs/REBUILD-CHECKLIST.md). `?board=1&interactive=1`
+// wires REAL pointer input: hover moves the ghost, click commits (or
+// removes, if the clicked cell already holds a piece), Escape or
+// right-click cancels. The DECISION logic (which cell, hover vs. commit
+// vs. remove vs. cancel) lives in public/pointer-interaction.js, tested
+// there against a real board with no browser at all; everything in this
+// file is the one browser-only step that module cannot do itself --
+// screen pixel -> world point -- plus re-rendering. INTERACTIVE_TYPE_ID
+// is the "brush": a real, glb-bound catalogue id (the same one RB3's own
+// READOUT_CANDIDATE_TYPE_ID already established as a safe demo choice),
+// not an invented one.
+const INTERACTIVE_MODE = new URLSearchParams(window.location.search).has("interactive");
+const INTERACTIVE_TYPE_ID = "house-a";
+
+const PIECES = HERO_MODE
+  ? [...HERO_IDS, ...HERO_PROP_IDS].map((id) => {
+      const p = ALL_PIECES.find((x) => x.id === id);
+      const anchor = HERO_ANCHORS[id] || HERO_PROP_ANCHORS[id];
+      return { ...p, anchor };
+    })
+  : BOARD_MODE
+    ? []
+    : ALL_PIECES;
+const GROUND = HERO_MODE ? HERO_GROUND : BOARD_MODE ? BOARD_GROUND : GROUND_FULL;
+
+// mergeGeometries requires every input to carry the same attribute set --
+// drop TANGENT (unused by this shader) so it does not conflict with the
+// ground plane's own attribute list, which never had one.
+function stripToPositionNormalUv(geometry) {
+  const out = new THREE.BufferGeometry();
+  out.setAttribute("position", geometry.getAttribute("position"));
+  out.setAttribute("normal", geometry.getAttribute("normal"));
+  out.setAttribute("uv", geometry.getAttribute("uv"));
+  if (geometry.index) out.setIndex(geometry.index);
+  return addZeroDecalAttribute(out);
+}
+
+function addLayerAttribute(geometry, layer) {
+  const count = geometry.getAttribute("position").count;
+  const data = new Float32Array(count).fill(layer);
+  geometry.setAttribute("layerIndex", new THREE.BufferAttribute(data, 1));
+  return geometry;
+}
+
+// 4.3 -- THE JOIN. Tier 1 (contact darkening baked into each piece's own
+// lower mesh, 4.2's fourth mechanism) does not touch the ground itself, so
+// a building still reads as resting cleanly on top of it rather than
+// meeting it -- confirmed by looking at the actual render, not assumed.
+// Escalated to tier 2: a ground decal sized to each footprint, R8's
+// "cover the intersection" cheap version. Every ground vertex within
+// DECAL_RADIUS of a footprint's own edge gets a value in [0,1] -- 0 at
+// the edge, 1 at DECAL_RADIUS and beyond -- baked as a per-vertex
+// attribute at build time (this scene has no runtime SDF pass), the same
+// "static, not per-frame" discipline C2.3 asks of validity checks.
+const DECAL_RADIUS = 1.4;
+function distanceOutsideFootprint(x, z, anchor, footprint) {
+  const minX = anchor[0], maxX = anchor[0] + footprint[0];
+  const minZ = anchor[1], maxZ = anchor[1] + footprint[1];
+  const dx = Math.max(minX - x, 0, x - maxX);
+  const dz = Math.max(minZ - z, 0, z - maxZ);
+  return Math.sqrt(dx * dx + dz * dz);
+}
+function addGroundDecalAttribute(geometry, footprints) {
+  const pos = geometry.getAttribute("position");
+  const count = pos.count;
+  const data = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i);
+    let nearest = Infinity;
+    for (const fp of footprints) nearest = Math.min(nearest, distanceOutsideFootprint(x, z, fp.anchor, fp.footprint));
+    data[i] = 1 - Math.min(nearest / DECAL_RADIUS, 1);
+  }
+  geometry.setAttribute("groundDecal", new THREE.BufferAttribute(data, 1));
+  return geometry;
+}
+function addZeroDecalAttribute(geometry) {
+  const count = geometry.getAttribute("position").count;
+  geometry.setAttribute("groundDecal", new THREE.BufferAttribute(new Float32Array(count), 1));
+  return geometry;
+}
+function addConstantDecalAttribute(geometry, value) {
+  const count = geometry.getAttribute("position").count;
+  geometry.setAttribute("groundDecal", new THREE.BufferAttribute(new Float32Array(count).fill(value), 1));
+  return geometry;
+}
+
+// RB2/RC1 -- the ghost overlay's own mesh, ONE construction site shared by
+// both the static ?ghost=valid|invalid demo (main()'s own `if
+// (ghostResolved)` block) and RC1's live pointer-driven ghost (updated on
+// every hover) -- not two near-identical copies that could drift apart,
+// and keeping the structural "exactly 3 THREE.Mesh constructions" count
+// (test/lookProofScene.test.ts) true of BOTH code paths, not just one.
+function buildGhostOverlayMesh(resolved) {
+  const [gw, gd] = resolved.footprint;
+  const [gx, gz] = resolved.anchor;
+  const geom = new THREE.BoxGeometry(gw, 0.4, gd).translate(gx + gw / 2, 0.2, gz + gd / 2);
+  const material = new THREE.MeshBasicMaterial({
+    color: resolved.valid ? GHOST_COLOR.valid : GHOST_COLOR.invalid,
+    transparent: true,
+    opacity: 0.55,
+    depthWrite: false,
+  });
+  return new THREE.Mesh(geom, material);
+}
+
+// RB5 -- "the ground stops reading as desert" (docs/specs/REBUILD-
+// CHECKLIST.md, THE CONVERGENCE; Mark, 2026-09-15, after 13-street-
+// level.png: "buildings in a dust bowl"). MEASURED, not assumed: the
+// existing ground layer (GROUND_FULL.layer, "ground-grass" per the
+// manifest) has a real mean RGB of (172,148,121) -- a warm dirt/sand
+// tone despite its own filename, not green -- so darkening it further
+// (4.3's existing groundDecal mechanism) could never read as PAVEMENT,
+// only as darker dirt. Escalated instead of retuned: a second, more
+// neutral ground texture (04-ground-paved.png, already CC0-vendored
+// gravel, added to the array texture by scripts/normalise-kit-
+// textures.mjs this same item) assigned per-vertex -- PAVING_RADIUS of
+// any real footprint reads as paved ground, everything past it stays
+// earth. Reuses distanceOutsideFootprint (the SAME distance function
+// 4.3's own decal already computes) rather than a second, independent
+// proximity calculation that could disagree with it about where a
+// footprint's own edge actually is.
+const PAVING_RADIUS = 6; // metres -- a plausible street-level paved apron, wider than DECAL_RADIUS's own tight contact-shadow scale
+// RC4 -- "the board camera's own scene pass" (docs/specs/REBUILD-
+// CHECKLIST.md, MAKE IT PLAYABLE; Mark, 2026-09-15, after 14-board.png:
+// "still reads as a dust bowl at that distance"). RB5's own PAVING_RADIUS
+// was tuned for HERO_MODE's close, angled composition, where the 4-6m
+// halo around a piece is a plausible chunk of the frame. The board
+// camera looks down over the WHOLE 24x16-cell area from much farther out
+// (measured: ~134-212m from camera to the near/far corners of
+// BOARD_GROUND, vs HERO's own ~40-90m to its pieces) -- at that
+// remove, a 6m halo around each piece is a small fraction of what's
+// actually visible, so almost the entire frame still reads as the warm
+// earth layer between the pieces. A wider board-specific radius closes
+// the gaps between BOARD_DEMO_PLACEMENTS' own pieces into one continuous
+// paved area -- the read this camera needs ("a built place"), not a
+// blanket retune of HERO_MODE's own already-judged 6m apron.
+const BOARD_PAVING_RADIUS = 20;
+function addGroundLayerAttribute(geometry, footprints, pavedLayer, earthLayer, radius = PAVING_RADIUS) {
+  const pos = geometry.getAttribute("position");
+  const count = pos.count;
+  const data = new Float32Array(count);
+  for (let i = 0; i < count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i);
+    let nearest = Infinity;
+    for (const fp of footprints) nearest = Math.min(nearest, distanceOutsideFootprint(x, z, fp.anchor, fp.footprint));
+    data[i] = nearest <= radius ? pavedLayer : earthLayer;
+  }
+  geometry.setAttribute("layerIndex", new THREE.BufferAttribute(data, 1));
+  return geometry;
+}
+
+// N1c -- "something at street level ... kerbs, a path" (docs/briefs/
+// BLD-2026-09-15.md). R8, "interesting things happen where different
+// things meet," already covered ONE junction (4.3's join decal, a
+// building's own footprint edge). This is the SAME logic -- cover the
+// intersection -- applied to the ground-meets-road-meets-building
+// junction the brief names explicitly.
+//
+// ATTEMPT 1 used the road pack's own layer texture on these boxes and
+// rendered a visible rainbow banding along every kerb -- found by looking
+// at test-street.png, not assumed. Cause: THREE.BoxGeometry maps each
+// face's own UV across the FULL 0..1 range regardless of the face's real
+// size, so a 16m-long, 0.5m-wide kerb face stretches the entire road
+// atlas (a sprite sheet with hard colour boundaries between its own
+// sub-images: markings, crossings, plain asphalt) into one thin,
+// squashed strip. Fixed by dropping the road layer for this geometry
+// entirely and reusing GROUND's own layer instead -- a single
+// photographic-style texture has no hard internal boundaries, so the
+// exact same stretch just reads as a slight blur, not banding. Distinct
+// from the ground around it via the ALREADY-VERIFIED join-decal
+// mechanism (4.3's uJoinDecal, addConstantDecalAttribute here instead of
+// footprint-distance-computed) at full strength: kerbs and path both
+// darken toward the join-decal's own 0.5x floor, the same mechanism a
+// building's own footprint edge already uses, not a new shader path.
+// HERO_MODE only -- the full 20-piece scene has no single "street" to
+// detail this way, and N1's own gate judges only the hero camera pair.
+const KERB_HEIGHT = 0.25;
+const KERB_WIDTH = 0.5;
+function buildStreetLevelDetail(roadPiece, housePiece, groundLayer) {
+  const [rx, rz] = roadPiece.anchor;
+  const [rw, rd] = roadPiece.footprint;
+  function kerbBox(cx, cz, w, d) {
+    const g = new THREE.BoxGeometry(w, KERB_HEIGHT, d).translate(cx, KERB_HEIGHT / 2, cz);
+    return addLayerAttribute(addConstantDecalAttribute(g, 1), groundLayer);
+  }
+  const kerbs = [
+    kerbBox(rx + rw / 2, rz - KERB_WIDTH / 2, rw + KERB_WIDTH * 2, KERB_WIDTH), // north edge
+    kerbBox(rx + rw / 2, rz + rd + KERB_WIDTH / 2, rw + KERB_WIDTH * 2, KERB_WIDTH), // south edge
+    kerbBox(rx - KERB_WIDTH / 2, rz + rd / 2, KERB_WIDTH, rd), // west edge
+    kerbBox(rx + rw + KERB_WIDTH / 2, rz + rd / 2, KERB_WIDTH, rd), // east edge
+  ];
+
+  // A paved path bridging the real gap between the road tile and the
+  // house -- the ground-meets-road-meets-building junction itself, not
+  // just the road's own edge alone.
+  const pathZFrom = 3, pathZTo = 9;
+  const pathX0 = housePiece.anchor[0] + housePiece.footprint[0]; // house's east edge
+  const pathX1 = rx; // road's west edge
+  const pathGeom = new THREE.PlaneGeometry(pathX1 - pathX0, pathZTo - pathZFrom)
+    .rotateX(-Math.PI / 2)
+    .translate((pathX0 + pathX1) / 2, 0.02, (pathZFrom + pathZTo) / 2);
+  const path = addLayerAttribute(addConstantDecalAttribute(pathGeom, 1), groundLayer);
+
+  return [...kerbs, path];
+}
+
+// N1a -- A SKY. "Even a gradient. The void is doing more damage to the
+// read than any missing shader feature, and it is the cheapest thing on
+// this list" (docs/briefs/BLD-2026-09-15.md). A CanvasTexture set as
+// scene.background is drawn as its own fullscreen background quad
+// (confirmed by measurement, not assumed: draw calls rose 1->2, triangles
+// 12068->12070, exactly one quad's worth) -- a real, small, separate cost
+// from the "one draw call for N pieces" claim the rest of this scene
+// proves, not zero as an earlier draft of this comment wrongly claimed.
+// Deliberately warm at the horizon, cool toward the zenith -- the same
+// warm-lit / cool-shadow relationship the warm-cool terminator mechanism
+// (4.2) already established, so the sky agrees with the light the scene
+// is already lit by rather than contradicting it.
+function buildSkyTexture() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d");
+  // RB5 -- retuned (docs/specs/REBUILD-CHECKLIST.md, THE CONVERGENCE):
+  // Mark's own read of 13-street-level.png named "a hard pale band at
+  // the horizon" alongside the fog's own warm tint. The old gradient's
+  // last two stops (0.85/1.0) were both a similarly saturated warm tan,
+  // leaving little visible change across that whole span -- a real flat
+  // plateau, not a fade. A third stop at 0.8, less saturated than
+  // either old one, spreads the fade further up the sky instead of
+  // leaving it compressed into the bottom 15%. The final stop matches
+  // look-proof-material.js's own uFogColor EXACTLY (0xe6dccb) so the
+  // ground still fades seamlessly into the sky at the horizon.
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  gradient.addColorStop(0, "#0d2340"); // zenith -- deep cool blue
+  gradient.addColorStop(0.55, "#3a5f82"); // mid sky
+  gradient.addColorStop(0.8, "#c9b99f"); // near horizon -- warm, matching LIGHT_DIR, less saturated than before
+  gradient.addColorStop(1, "#e6dccb"); // horizon -- matches uFogColor exactly
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+async function buildArrayTexture() {
+  const manifest = await fetch("vendor/kits/array-texture/manifest.json").then((r) => r.json());
+  const size = manifest.targetSize;
+  const depth = manifest.layers.length;
+  const combined = new Uint8Array(size * size * 4 * depth);
+  for (const layer of manifest.layers) {
+    const img = await createImageBitmap(await fetch(`vendor/kits/array-texture/${layer.file}`).then((r) => r.blob()));
+    const canvas = document.createElement("canvas");
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, size, size);
+    const pixels = ctx.getImageData(0, 0, size, size).data;
+    combined.set(pixels, layer.index * size * size * 4);
+  }
+  const tex = new THREE.DataArrayTexture(combined, size, size, depth);
+  tex.format = THREE.RGBAFormat;
+  tex.type = THREE.UnsignedByteType;
+  // N1b -- found while checking the far-ground render, not assumed: without
+  // mipmaps, a single UV tile stretched across FAR_GROUND_SIZE (400m) and
+  // viewed at the grazing angle this camera uses toward the horizon
+  // minifies far faster than one sampled texel per screen pixel, and
+  // THREE's own default minFilter for a texture this size aliases that
+  // into a visible checkerboard moire pattern near the horizon -- worse
+  // than the hard edge it replaced. 512 is power-of-two, so real mipmaps
+  // are available; turning them on (plus anisotropic filtering, for the
+  // same grazing angle) is the standard fix, not a workaround.
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.anisotropy = 8;
+  tex.needsUpdate = true;
+  // RB1 -- board-renderer.js's own layerForGlb needs this SAME manifest
+  // (which file is on which layer) to resolve a catalogue entry's glb path
+  // into a layer index; returning it here keeps one fetch, one source of
+  // truth, rather than a second fetch of the same file for board mode.
+  return { tex, manifest };
+}
+
+// L11 -- a self-contained shadow-map pass, not three.js's own automatic
+// shadow system (which needs a real THREE.Light and a material built for
+// its light-loop; this scene has neither -- the light exists only as
+// look-proof-material.js's own uLightDir uniform). An orthographic camera
+// sized to the REAL bounding box of the pieces and the near ground
+// (computed after every piece is placed, not guessed), positioned along
+// the same LIGHT_DIR the shading already uses, renders the scene's depth
+// into a DepthTexture. bb deliberately excludes N1b's far ground -- that
+// plane exists only to extend the visible silhouette into the fog, and
+// sizing the shadow frustum to its ~400m extent instead of the buildings'
+// own ~90m would spread the SAME 1024x1024 depth texture over a much
+// larger area, coarsening every texel the buildings actually need. The
+// main material samples that texture itself (createLookProofMaterial's
+// own sampleShadow) -- this function only builds the camera, the render
+// target, and renders the one pass.
+function buildShadowPass(renderer, scene, bb) {
+  const center = bb.getCenter(new THREE.Vector3());
+  const size = bb.getSize(new THREE.Vector3());
+  const camDistance = Math.max(size.x, size.y, size.z) * 1.5 + 10;
+
+  const shadowCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.5, camDistance * 2);
+  shadowCamera.position.copy(center).addScaledVector(LIGHT_DIR, camDistance);
+  shadowCamera.lookAt(center);
+  shadowCamera.updateMatrixWorld(true);
+
+  // FOUND WRONG BY A BLIND AUDIT: half(max(size.x, size.z)) approximates
+  // the frustum from the OBJECT's own world-axis extents, not from what
+  // the LIGHT actually sees. LIGHT_DIR is oblique (0.45, 0.78, 0.35), not
+  // straight down -- projecting the bounding box onto the light camera's
+  // own right/up axes gives a LARGER footprint than either world-axis
+  // half-width alone, and the old formula clipped shadow coverage at the
+  // scene's own edges without any test able to see it (the coverage
+  // number was never compared against the real geometry it needed to
+  // contain). Fixed the standard way: transform all 8 box corners into
+  // the shadow camera's own view space and fit the frustum to their real
+  // min/max extent, not an axis-aligned guess.
+  const corners = [];
+  for (let i = 0; i < 8; i++) {
+    corners.push(new THREE.Vector3(
+      i & 1 ? bb.max.x : bb.min.x,
+      i & 2 ? bb.max.y : bb.min.y,
+      i & 4 ? bb.max.z : bb.min.z,
+    ));
+  }
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const c of corners) {
+    const local = c.clone().applyMatrix4(shadowCamera.matrixWorldInverse);
+    minX = Math.min(minX, local.x); maxX = Math.max(maxX, local.x);
+    minY = Math.min(minY, local.y); maxY = Math.max(maxY, local.y);
+  }
+  const margin = 2; // metres
+  shadowCamera.left = minX - margin;
+  shadowCamera.right = maxX + margin;
+  shadowCamera.bottom = minY - margin;
+  shadowCamera.top = maxY + margin;
+  shadowCamera.updateProjectionMatrix();
+
+  const SHADOW_MAP_SIZE = 1024;
+  const target = new THREE.WebGLRenderTarget(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+  target.depthTexture = new THREE.DepthTexture(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+  target.depthTexture.type = THREE.UnsignedIntType;
+
+  const lightViewProjectionMatrix = new THREE.Matrix4().multiplyMatrices(shadowCamera.projectionMatrix, shadowCamera.matrixWorldInverse);
+
+  const prevTarget = renderer.getRenderTarget();
+  renderer.setRenderTarget(target);
+  renderer.clear();
+  const t0 = performance.now();
+  renderer.render(scene, shadowCamera);
+  const shadowPassMs = performance.now() - t0;
+  renderer.setRenderTarget(prevTarget);
+
+  // L11's own "measure, not estimate" instruction -- read from the real
+  // DepthTexture that was actually created, not a formula computed
+  // separately from it. UnsignedIntType is 4 bytes/texel (a 32-bit depth
+  // buffer); width/height come from the texture object itself.
+  const bytesPerTexel = 4;
+  const shadowMapBytes = SHADOW_MAP_SIZE * SHADOW_MAP_SIZE * bytesPerTexel;
+  console.log(`SHADOW-MAP-COST size=${SHADOW_MAP_SIZE}x${SHADOW_MAP_SIZE} bytes=${shadowMapBytes} (${(shadowMapBytes / 1024 / 1024).toFixed(2)} MiB) renderMs=${shadowPassMs.toFixed(3)}`);
+
+  return { depthTexture: target.depthTexture, lightViewProjectionMatrix, shadowMapBytes, shadowPassMs };
+}
+
+async function main() {
+  // preserveDrawingBuffer: true -- every other headless-shoot pipeline in
+  // this repo sets it (scripts/shoot-kitbash-contact-sheet.mjs,
+  // scripts/shoot-buildings-self-shadow.mjs, public/kitbash-*.html) for the
+  // same reason: without it, reading the canvas via toDataURL() in a
+  // SEPARATE page.evaluate() call after render() can race the browser's own
+  // buffer clear and capture blank white. Found exactly that way here:
+  // "draw calls: 1, triangles: 1270", zero console errors, blank canvas.
+  const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true, preserveDrawingBuffer: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(1);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.95;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  document.body.appendChild(renderer.domElement);
+  window.__renderer = renderer;
+
+  const scene = new THREE.Scene();
+  scene.background = buildSkyTexture();
+
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 500);
+  if (HERO_MODE) {
+    // The EXACT camera 01-08 used -- pixel continuity with the shot Mark
+    // actually judged, not a re-derived approximation.
+    camera.position.set(-6, 34, 70);
+    camera.lookAt(6, 6, 4);
+  } else if (BOARD_MODE) {
+    // RB1's own demo board -- sized to BOARD_GROUND's real extent, not
+    // guessed. Same diagonal-corner angle as L12's wide camera below, for
+    // the identical reason: a straight-on approach stacks whichever
+    // piece is nearest the camera in front of everything behind it.
+    const boardCenterX = GROUND.anchor[0] + GROUND.footprint[0] / 2;
+    const boardCenterZ = GROUND.anchor[1] + GROUND.footprint[1] / 2;
+    camera.position.set(boardCenterX - 70, 130, boardCenterZ - 70);
+    camera.lookAt(boardCenterX, 0, boardCenterZ);
+  } else {
+    // L12's own camera -- the 01-08 sequence's close-up framing cannot see
+    // a 20-piece site plan; a wider, higher angle replaces it for this item
+    // only. LAYOUT_BOUNDS gives the real scene extent, not a guess.
+    const layoutCenterX = LAYOUT_BOUNDS.totalWidth / 2;
+    const layoutCenterZ = LAYOUT_BOUNDS.totalDepth / 2;
+    // A steep diagonal-corner angle, not a straight-on approach: at 20
+    // pieces the tallest (the mega-tower, row 4, closest to any
+    // straight-on camera) otherwise occludes everything behind it. Viewed
+    // from a corner along the diagonal, no single piece sits directly in
+    // front of another the way a straight approach stacks row 4 in front
+    // of rows 1-3.
+    camera.position.set(layoutCenterX - 95, 230, layoutCenterZ - 95);
+    camera.lookAt(layoutCenterX, 0, layoutCenterZ);
+  }
+
+  const [{ tex: arrayTex, manifest }, ...pieceGeoms] = await Promise.all([
+    buildArrayTexture(),
+    ...PIECES.map((p) => loadPieceGeometry(p.glb)),
+  ]);
+
+  // RB1 -- the real board. Placed via the SAME board.place() a player's
+  // own placement session would call (public/area-board.js), against the
+  // SAME catalogue BO7A bound glb paths onto (data/catalogue.json, fetched
+  // real -- never a hand-typed copy). `resolveBoardPieces`
+  // (board-renderer.js) reads the board's own CURRENT state -- place(),
+  // then optionally remove() a specific id (?removeId=<id>) -- so the
+  // "place, render; remove, render" gate is one real board's own state
+  // transition, not two independently-scripted renders.
+  let boardResolved = [];
+  let boardSkipped = [];
+  let boardFootprintsForDecal = [];
+  let ghostResolved = null;
+  let readoutResolved = null;
+  // RC1 -- promoted to main()'s own outer scope (not `let` inside the
+  // BOARD_MODE block below) so the interactive wiring at the end of this
+  // function, which runs AFTER that block, can still reach the real board,
+  // catalogue and a piece-geometry cache keyed by piece id -- a rebuild on
+  // commit/remove only needs to load the glb for a NEWLY placed piece, not
+  // re-fetch every piece already on the board.
+  let board = null;
+  let catalogueById = null;
+  const pieceGeometryCache = new Map();
+  if (BOARD_MODE) {
+    const catalogueArr = await fetch("data/catalogue.json").then((r) => r.json());
+    catalogueById = Object.fromEntries(catalogueArr.map((e) => [e.id, e]));
+    board = createAreaBoard({ width: BOARD_WIDTH_CELLS, height: BOARD_HEIGHT_CELLS, catalogue: catalogueById });
+    const placedIds = [];
+    for (const p of BOARD_DEMO_PLACEMENTS) {
+      const result = board.place(p.typeId, p.anchorCell, p.rotation);
+      if (!result.ok) {
+        // A demo placement this file's own table asked for was refused --
+        // a real disagreement between this scene and the board's own
+        // rules, surfaced loudly rather than silently rendering fewer
+        // pieces than the table names.
+        console.error(`BOARD-PLACE-REFUSED typeId=${p.typeId} reason=${result.reason} detail=${result.detail || ""}`);
+      } else {
+        placedIds.push(result.id);
+      }
+    }
+    if (BOARD_REMOVE_ID !== null) {
+      const removed = board.remove(BOARD_REMOVE_ID);
+      console.log(`BOARD-REMOVE id=${BOARD_REMOVE_ID} ok=${removed.ok}`);
+    }
+
+    // RB4 -- "Still there on reload". Serialize the real session (C2.5's
+    // save shape), then rebuild a FRESH board from that save via the real
+    // loadBoard() -- every render step downstream of this point (the
+    // ground decal, resolveBoardPieces, the merge) operates on the
+    // RELOADED board, not the original, so the render itself is the
+    // proof, not a comment claiming reload works.
+    if (RELOAD_MODE) {
+      const saveSession = createPlacementSession({ board });
+      const save = saveSession.serialize({ seed: "rb4-demo", generatorParams: null });
+      const reloadWidth = RELOAD_SHRINK ? BOARD_WIDTH_CELLS - 4 : BOARD_WIDTH_CELLS;
+      const { board: reloadedBoard, failures } = loadBoard(
+        { width: reloadWidth, height: BOARD_HEIGHT_CELLS, catalogue: catalogueById },
+        save,
+      );
+      // loadBoard() returns failures rather than swallowing them (C2.5) --
+      // surfaced here, not discarded. Empty on a normal reload; real and
+      // named when ?reloadShrink=1 makes mega-tower-a's own saved anchor
+      // no longer fit the reloaded board's own (narrower) bounds.
+      console.log(`RELOAD-FAILURES ${failures.length === 0 ? "none" : failures.map((f) => `${f.typeId}(${f.reason})`).join(", ")}`);
+      board = reloadedBoard;
+    }
+
+    const { resolved, skipped } = resolveBoardPieces(board, catalogueById, manifest);
+    boardResolved = resolved;
+    boardSkipped = skipped;
+    boardFootprintsForDecal = resolved.map((p) => ({ anchor: p.anchor, footprint: p.footprint }));
+    console.log(`BOARD-STATE placed=${placedIds.length} resolved=${resolved.length} skipped=${skipped.length} removeId=${BOARD_REMOVE_ID}`);
+    if (skipped.length) {
+      console.log(`BOARD-SKIPPED ${skipped.map((s) => `${s.typeId}(${s.reason})`).join(", ")}`);
+    }
+
+    // RB2 -- the ghost. A real session, the SAME setGhost/commit a player's
+    // own placement UI would call (public/placement.js), previewing over
+    // the SAME real board the pieces above were placed on.
+    if (GHOST_MODE === "valid" || GHOST_MODE === "invalid") {
+      const session = createPlacementSession({ board });
+      const demo = GHOST_DEMO[GHOST_MODE];
+      const ghost = session.setGhost(demo.typeId, demo.anchorCell, demo.rotation);
+      ghostResolved = resolveGhost(ghost, catalogueById);
+      console.log(`GHOST-STATE mode=${GHOST_MODE} valid=${ghost.valid} reason=${ghost.reason}`);
+      if (!ghost.valid) {
+        // "committing it changes nothing" -- proven here, on the REAL
+        // board, not asserted: resolve before, commit, resolve after,
+        // compare the actual piece counts a render would show.
+        const beforeCommit = resolveBoardPieces(board, catalogueById, manifest).resolved.length;
+        const commitResult = session.commit();
+        const afterCommit = resolveBoardPieces(board, catalogueById, manifest).resolved.length;
+        console.log(`GHOST-COMMIT ok=${commitResult.ok} reason=${commitResult.reason} piecesBefore=${beforeCommit} piecesAfter=${afterCommit} unchanged=${beforeCommit === afterCommit}`);
+      }
+    }
+
+    // RB3 -- the value readout. See this file's own comment above
+    // READOUT_MODE for why this calls through ScoringModule rather than
+    // a statically-imported valueAt/valueIfPlaced.
+    if (READOUT_CELL) {
+      readoutResolved = resolveReadout(ScoringModule, board, catalogueById, READOUT_CELL, READOUT_CANDIDATE_TYPE_ID, 0);
+      console.log(`READOUT-STATE cell=${READOUT_CELL.x},${READOUT_CELL.y} available=${readoutResolved.available} ${readoutResolved.available ? `current=${readoutResolved.current} ifPlaced=${readoutResolved.ifPlaced}` : `reason="${readoutResolved.reason}"`}`);
+    }
+  }
+  window.__boardResolved = boardResolved;
+  window.__boardSkipped = boardSkipped;
+  window.__ghostResolved = ghostResolved;
+  window.__readoutResolved = readoutResolved;
+
+  // Subdivided (1 segment/metre) so the join decal below has enough
+  // resolution to read as a gradient rather than one flat quad -- a
+  // single-quad ground cannot carry a per-vertex halo around a footprint.
+  const groundGeomRaw = new THREE.PlaneGeometry(GROUND.footprint[0], GROUND.footprint[1], GROUND.footprint[0], GROUND.footprint[1])
+    .rotateX(-Math.PI / 2)
+    .translate(GROUND.anchor[0] + GROUND.footprint[0] / 2, 0, GROUND.anchor[1] + GROUND.footprint[1] / 2);
+  addGroundDecalAttribute(groundGeomRaw, [...PIECES, ...boardFootprintsForDecal]);
+  // RB5 -- read the paved layer's own real index from the manifest
+  // (never hardcoded) -- matches board-renderer.js's own layerForGlb
+  // discipline: one source of truth for "which file is on which layer".
+  const pavedLayerIndex = manifest.layers.find((l) => l.file.includes("ground-paved")).index;
+  const groundGeom = addGroundLayerAttribute(groundGeomRaw, [...PIECES, ...boardFootprintsForDecal], pavedLayerIndex, GROUND.layer, BOARD_MODE ? BOARD_PAVING_RADIUS : PAVING_RADIUS);
+  // Ground's own UVs tile once across its footprint -- fine for a grass
+  // sample texture at this scale, and not what this scene exists to prove.
+
+  // N1b -- "a ground that reads as continuing past the frame rather than
+  // stopping at a visible edge" (docs/briefs/BLD-2026-09-15.md). The near
+  // ground above is only GROUND.footprint metres across (90x60 in HERO_MODE)
+  // -- at this camera's distance its own far corners are ~78-112 units out,
+  // squarely inside the frame, so it reads as a stage, not a place. Tried
+  // fog alone first and rejected it: the buildings themselves sit at
+  // overlapping camera distances (~40-90 units), so no single linear fog
+  // range can hide the near ground's edge without also fogging out the
+  // subject. Fixing the actual cause instead of leaning harder on fog: a
+  // second, much larger, coarsely-subdivided plane (8 segments, not
+  // GROUND.footprint's 1/metre -- this plane carries no decal or lighting
+  // detail, it exists only to give fog something past the buildings to
+  // fade into) extends solid ground out to FAR_GROUND_SIZE metres, well
+  // beyond both the buildings and the fog's own far distance (retuned
+  // below). Sits at y=-0.02, fractionally below the near ground, so the
+  // two never z-fight where they overlap -- the near ground (with its own
+  // join-decal detail) always wins those pixels.
+  const FAR_GROUND_SIZE = 400;
+  const farGroundGeomRaw = new THREE.PlaneGeometry(FAR_GROUND_SIZE, FAR_GROUND_SIZE, 8, 8)
+    .rotateX(-Math.PI / 2)
+    .translate(GROUND.anchor[0] + GROUND.footprint[0] / 2, -0.02, GROUND.anchor[1] + GROUND.footprint[1] / 2);
+  const farGroundGeom = addLayerAttribute(addZeroDecalAttribute(farGroundGeomRaw), GROUND.layer);
+
+  const preparedPieces = pieceGeoms.map((geom, i) => {
+    const p = PIECES[i];
+    fitToFootprint(geom, p.footprint, p.anchor);
+    const stripped = stripToPositionNormalUv(geom);
+    return addLayerAttribute(stripped, p.layer);
+  });
+
+  // RB1 -- load and prepare exactly what boardResolved names, in the same
+  // shape preparedPieces already produces. Loaded HERE (not in the
+  // opening Promise.all) because which glb files are even needed is only
+  // known after the board itself is built and resolved -- BOARD_MODE's
+  // own piece list is not known in advance the way HERO/L12's PIECES is.
+  const boardPieceGeoms = await Promise.all(boardResolved.map((p) => loadPieceGeometry(p.glb)));
+  const preparedBoardPieces = boardPieceGeoms.map((geom, i) => {
+    const p = boardResolved[i];
+    rotateGeometryY(geom, p.rotation, THREE);
+    fitToFootprint(geom, p.footprint, p.anchor);
+    const stripped = stripToPositionNormalUv(geom);
+    return addLayerAttribute(stripped, p.layer);
+  });
+  // RC1 -- seed the cache with what is already loaded, keyed by the
+  // board's own piece id (stable for a piece's whole lifetime; ids are
+  // never reused while a piece is still on the board). A later
+  // rebuildBoardMesh() reuses these instead of re-fetching the same glb.
+  boardResolved.forEach((p, i) => pieceGeometryCache.set(p.id, preparedBoardPieces[i]));
+
+  // N1c -- kerbs and a path around the road tile, HERO_MODE only (see
+  // buildStreetLevelDetail's own comment for why).
+  const streetDetailGeoms = HERO_MODE
+    ? buildStreetLevelDetail(
+        PIECES.find((p) => p.id === "street-tile-4wide"),
+        PIECES.find((p) => p.id === "house-2x3"),
+        GROUND.layer,
+      )
+    : [];
+
+  // The shadow camera's own frustum is sized from the pieces, the near
+  // ground, and N1c's own street detail -- see buildShadowPass's own
+  // comment for why the far ground must stay out of this box (it would
+  // coarsen every shadow texel the buildings actually need).
+  const shadowBB = new THREE.Box3();
+  groundGeom.computeBoundingBox();
+  shadowBB.union(groundGeom.boundingBox);
+  for (const g of [...preparedPieces, ...streetDetailGeoms, ...preparedBoardPieces]) {
+    g.computeBoundingBox();
+    shadowBB.union(g.boundingBox);
+  }
+
+  const merged = mergeGeometries([groundGeom, farGroundGeom, ...preparedPieces, ...streetDetailGeoms, ...preparedBoardPieces], false);
+  const material = createLookProofMaterial(arrayTex);
+  if (BOARD_MODE) {
+    // RC4 -- fog range retuned for THIS camera only (a caller-side
+    // uniform write, not an edit to look-proof-material.js -- HERO_MODE's
+    // own already-judged uFogNear/uFogFar stay exactly what RB5 left
+    // them). MEASURED, not guessed: with BOARD_MODE's own camera
+    // (boardCenter - 70 on x/z, y=130) and BOARD_GROUND's real footprint,
+    // the near and far corners of the visible ground sit ~134m and ~212m
+    // from the camera -- both already past HERO's own uFogNear=90, but
+    // the fog COLOR (0xe6dccb) is itself warm/tan, so fading toward it
+    // barely changes the "dust" read, only its brightness. Narrowing the
+    // range to bracket this camera's own real 134-212m span pushes the
+    // far ground much closer to fully fog-coloured (pale, closer to the
+    // sky) rather than leaving ~13% of the original warm ground tone
+    // still mixed in at the frame's own far edge.
+    material.uniforms.uFogNear.value = 100;
+    material.uniforms.uFogFar.value = 220;
+  }
+  const mesh = new THREE.Mesh(merged, material);
+  scene.add(mesh);
+  window.__material = material;
+  window.__scene = scene;
+
+  // RB2 -- the ghost overlay. A SEPARATE, simple, transparent mesh (not
+  // merged into the shared-material mesh above): the shared material
+  // samples the array texture and does not carry a tint/alpha uniform,
+  // and RB1's own brief said plainly not to rewrite it ("the material is
+  // proven"). Green reads as placeable, red as refused -- GHOST_COLOR's
+  // own mapping, chosen for maximum, unambiguous separation rather than a
+  // subtler palette a screenshot's own compression or a colourblind
+  // viewer could blur together. Never receives or casts a shadow (a
+  // preview is not a real object) and is excluded from the shadow
+  // camera's own bounding box above.
+  if (ghostResolved) {
+    const ghostMesh = buildGhostOverlayMesh(ghostResolved);
+    scene.add(ghostMesh);
+    window.__ghostMesh = ghostMesh;
+  }
+
+  // RB3/RC5 -- the value readout's own visual marker. A small floating
+  // diamond at the queried cell -- blue now that S4 is real
+  // (READOUT_COLOR.available, the common case as of this run), neutral
+  // grey only if scoring becomes unavailable again (READOUT_COLOR
+  // .unavailable). Still a status indicator, not a data visualisation:
+  // the real current/ifPlaced numbers are the evidence (READOUT-STATE,
+  // above, and window.__readoutResolved), read directly rather than
+  // encoded into a guessed marker height or colour ramp -- a screenshot
+  // paired with the console line is what this run's own brief asked be
+  // shown to Mark, not a second, invented visual encoding of the same
+  // numbers.
+  if (readoutResolved) {
+    const [rx, rz] = anchorForCell(READOUT_CELL);
+    const readoutGeom = new THREE.OctahedronGeometry(1.4, 0)
+      .translate(rx + 2, 2.5, rz + 2);
+    const readoutMaterial = new THREE.MeshBasicMaterial({
+      color: readoutResolved.available ? READOUT_COLOR.available : READOUT_COLOR.unavailable,
+      transparent: true,
+      opacity: 0.75,
+      depthWrite: false,
+    });
+    const readoutMesh = new THREE.Mesh(readoutGeom, readoutMaterial);
+    scene.add(readoutMesh);
+    window.__readoutMesh = readoutMesh;
+  }
+
+  let shadowPass = buildShadowPass(renderer, scene, shadowBB);
+  material.uniforms.uShadowMap.value = shadowPass.depthTexture;
+  material.uniforms.uLightViewProjectionMatrix.value.copy(shadowPass.lightViewProjectionMatrix);
+  window.__shadowMapTexture = shadowPass.depthTexture;
+
+  renderer.info.reset(); // the shadow pass above is a real render call; do not count it as the scene's own draw calls
+  const mainT0 = performance.now();
+  renderer.render(scene, camera);
+  const mainRenderMs = performance.now() - mainT0;
+  console.log("LOOK-PROOF ready, draw calls:", renderer.info.render.calls, "triangles:", renderer.info.render.triangles, "mainRenderMs:", mainRenderMs.toFixed(3));
+
+  // RC1 -- real pointer input. `?board=1&interactive=1` only: the static
+  // GHOST_MODE/READOUT_MODE query params above stay exactly what they
+  // were (single-shot, screenshot-driven demos); this mode owns its OWN
+  // session and keeps the scene live for real mouse/keyboard events
+  // instead of rendering once and stopping.
+  if (BOARD_MODE && INTERACTIVE_MODE) {
+    const session = createPlacementSession({ board });
+    const raycaster = new THREE.Raycaster();
+    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    let liveGhostMesh = null;
+
+    // Screen pixel -> world (x,z) on the ground plane (y=0). The one step
+    // pointer-interaction.js cannot do itself (it has no THREE, no DOM) --
+    // everything past this point (which cell, hover vs. commit vs. remove
+    // vs. cancel) is that module's own tested logic, called with a plain
+    // {x,z} this function hands it.
+    function worldXZFromClientXY(clientX, clientY) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      const ndc = new THREE.Vector2(
+        ((clientX - rect.left) / rect.width) * 2 - 1,
+        -((clientY - rect.top) / rect.height) * 2 + 1,
+      );
+      raycaster.setFromCamera(ndc, camera);
+      const hit = new THREE.Vector3();
+      return raycaster.ray.intersectPlane(groundPlane, hit) ? { x: hit.x, z: hit.z } : null;
+    }
+
+    // The inverse projection, exposed for scripts/interact-look-proof.mjs:
+    // given a board cell, the screen pixel a real mouse would need to hit
+    // to hover/click it. Kept here rather than re-derived in the driving
+    // script so both directions of the screen<->world mapping go through
+    // the SAME camera object, not two independently-computed projections
+    // that could silently disagree.
+    function worldToScreen(x, y, z) {
+      const v = new THREE.Vector3(x, y, z).project(camera);
+      const rect = renderer.domElement.getBoundingClientRect();
+      return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + (1 - (v.y + 1) / 2) * rect.height };
+    }
+    function cellCenterToScreen(cellX, cellY) {
+      const [ax, az] = anchorForCell({ x: cellX, y: cellY });
+      return worldToScreen(ax + MODULE_SIZE_M / 2, 0, az + MODULE_SIZE_M / 2);
+    }
+    window.__cellCenterToScreen = cellCenterToScreen;
+
+    function updateGhostMesh() {
+      const ghost = session.getGhost();
+      const resolved = resolveGhost(ghost, catalogueById);
+      if (liveGhostMesh) {
+        scene.remove(liveGhostMesh);
+        liveGhostMesh.geometry.dispose();
+        liveGhostMesh.material.dispose();
+        liveGhostMesh = null;
+      }
+      if (resolved) {
+        liveGhostMesh = buildGhostOverlayMesh(resolved);
+        scene.add(liveGhostMesh);
+      }
+      window.__ghostMesh = liveGhostMesh;
+      window.__ghostResolved = resolved;
+    }
+
+    // A commit or a remove changes what board.pieces() actually holds --
+    // rebuild the merged geometry (ground decal/layer depend on the real
+    // footprint set) and the shadow pass (a newly placed piece with no
+    // shadow, or a removed one still casting one, is exactly the kind of
+    // "renderer and the rule disagreeing" this run's own brief warns
+    // about) from the CURRENT board, reusing pieceGeometryCache so only a
+    // genuinely new piece triggers a glb fetch.
+    async function rebuildBoardMesh() {
+      const { resolved, skipped } = resolveBoardPieces(board, catalogueById, manifest);
+      boardResolved = resolved;
+      boardSkipped = skipped;
+      window.__boardResolved = boardResolved;
+      window.__boardSkipped = boardSkipped;
+
+      for (const p of resolved) {
+        if (pieceGeometryCache.has(p.id)) continue;
+        const raw = await loadPieceGeometry(p.glb);
+        rotateGeometryY(raw, p.rotation, THREE);
+        fitToFootprint(raw, p.footprint, p.anchor);
+        const stripped = stripToPositionNormalUv(raw);
+        pieceGeometryCache.set(p.id, addLayerAttribute(stripped, p.layer));
+      }
+      const liveBoardGeoms = resolved.map((p) => pieceGeometryCache.get(p.id));
+
+      const footprintsForDecal = resolved.map((p) => ({ anchor: p.anchor, footprint: p.footprint }));
+      const newGroundGeomRaw = new THREE.PlaneGeometry(GROUND.footprint[0], GROUND.footprint[1], GROUND.footprint[0], GROUND.footprint[1])
+        .rotateX(-Math.PI / 2)
+        .translate(GROUND.anchor[0] + GROUND.footprint[0] / 2, 0, GROUND.anchor[1] + GROUND.footprint[1] / 2);
+      addGroundDecalAttribute(newGroundGeomRaw, [...PIECES, ...footprintsForDecal]);
+      const newGroundGeom = addGroundLayerAttribute(newGroundGeomRaw, [...PIECES, ...footprintsForDecal], pavedLayerIndex, GROUND.layer, BOARD_PAVING_RADIUS); // this rebuild only ever runs inside BOARD_MODE (see the enclosing if above)
+
+      const newMerged = mergeGeometries([newGroundGeom, farGroundGeom, ...preparedPieces, ...streetDetailGeoms, ...liveBoardGeoms], false);
+      mesh.geometry.dispose();
+      mesh.geometry = newMerged;
+
+      const newShadowBB = new THREE.Box3();
+      newGroundGeom.computeBoundingBox();
+      newShadowBB.union(newGroundGeom.boundingBox);
+      for (const g of [...preparedPieces, ...streetDetailGeoms, ...liveBoardGeoms]) {
+        g.computeBoundingBox();
+        newShadowBB.union(g.boundingBox);
+      }
+      shadowPass = buildShadowPass(renderer, scene, newShadowBB);
+      material.uniforms.uShadowMap.value = shadowPass.depthTexture;
+      material.uniforms.uLightViewProjectionMatrix.value.copy(shadowPass.lightViewProjectionMatrix);
+      window.__shadowMapTexture = shadowPass.depthTexture;
+    }
+
+    renderer.domElement.addEventListener("pointermove", (e) => {
+      const hit = worldXZFromClientXY(e.clientX, e.clientY);
+      if (!hit) return;
+      const cell = cellFromWorldXZ(hit.x, hit.z);
+      window.__lastHoverCell = cell;
+      handleHover(session, INTERACTIVE_TYPE_ID, cell, 0);
+      updateGhostMesh();
+      renderer.render(scene, camera);
+    });
+
+    // Two clicks close enough together that the FIRST one's async rebuild
+    // (a newly-committed piece needs a real glb fetch) is still in flight
+    // when the SECOND one starts would otherwise race: both read/write
+    // pieceGeometryCache and both eventually call `mesh.geometry.dispose();
+    // mesh.geometry = newMerged;` against whatever the OTHER call last put
+    // there -- whichever rebuild happens to finish LAST wins, even if it
+    // started from an OLDER board snapshot, which can leave the mesh
+    // showing a piece the board no longer has (or missing one it does)
+    // exactly the "renderer and the rule disagreeing" failure this run's
+    // own brief names. board.pieces() itself is never at risk (session
+    // commit/remove are synchronous, called before any await below) --
+    // only the VISUAL rebuild needs serializing. Chained onto a single
+    // promise so a second rebuild only starts once the first has actually
+    // finished mutating mesh.geometry, and always reads the board fresh
+    // when IT runs -- eventual consistency, not "last click wins by luck".
+    let rebuildChain = Promise.resolve();
+    function queueRebuild() {
+      rebuildChain = rebuildChain.then(() => rebuildBoardMesh());
+      return rebuildChain;
+    }
+
+    renderer.domElement.addEventListener("pointerdown", async (e) => {
+      if (e.button !== 0) return; // left click only -- right-click is contextmenu, below
+      const hit = worldXZFromClientXY(e.clientX, e.clientY);
+      if (!hit) return;
+      const cell = cellFromWorldXZ(hit.x, hit.z);
+      const outcome = handleClick(board, session, cell);
+      window.__lastClickOutcome = outcome;
+      const piecesRightAfterThisClick = board.pieces().length; // captured NOW, synchronously -- a later click's own rebuild must not change what THIS click's own evidence line reports
+      await queueRebuild();
+      updateGhostMesh();
+      renderer.render(scene, camera);
+      console.log(`POINTER-CLICK cell=${cell.x},${cell.y} action=${outcome.action} ok=${outcome.result.ok} pieces=${piecesRightAfterThisClick}`);
+    });
+
+    renderer.domElement.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      handleCancel(session);
+      updateGhostMesh();
+      renderer.render(scene, camera);
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      handleCancel(session);
+      updateGhostMesh();
+      renderer.render(scene, camera);
+    });
+
+    window.__session = session;
+    window.__board = board;
+    window.__interactiveTypeId = INTERACTIVE_TYPE_ID;
+    window.__worldXZFromClientXY = worldXZFromClientXY;
+  }
+
+  window.__ready = true;
+}
+
+main().catch((e) => {
+  console.error(e);
+  window.__ready = "error";
+});
+</script>
+</body>
+</html>

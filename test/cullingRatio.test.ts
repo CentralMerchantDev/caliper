@@ -52,9 +52,19 @@ test("street level drawn triangles are a small fraction of skyline view (culling
     ],
   });
 
-  const getTris = async (viewName) => {
+  // frustumCull=0 is an existing debug flag (public/city-render.js) that turns
+  // off THREE's per-mesh frustumCulled flag without touching LOD selection or
+  // chunk size. Comparing the SAME camera with it on vs off isolates frustum
+  // culling itself, decoupled from LOD/geometry budget -- a street-vs-skyline
+  // triangle ratio cannot do that, because richer near LOD0 geometry raises
+  // the ratio regardless of whether culling still works. See
+  // docs/audits/K6-BUILDINGS.md "The culling-ratio gate was measuring the
+  // wrong thing" for the derivation and the 90% floor's reasoning; this test
+  // duplicated test/regressionGate.test.ts's old triangle-ratio gate exactly
+  // (same unsourced 40% threshold), so it gets the same replacement.
+  const getCalls = async (viewName, frustumCull) => {
     const page = await browser.newPage({ viewport: { width: 1200, height: 700 } });
-    const url = `http://127.0.0.1:${port}/city.html?bare=1&dpr=1&shadows=0&post=0&still=5&pdb=1&chunkSize=2000&view=${encodeURIComponent(viewName)}`;
+    const url = `http://127.0.0.1:${port}/city.html?bare=1&dpr=1&shadows=0&post=0&still=5&pdb=1&chunkSize=2000&view=${encodeURIComponent(viewName)}&frustumCull=${frustumCull}`;
     await page.goto(url, { waitUntil: "load", timeout: 120000 });
     await page.waitForFunction("window.__ready === true", null, { timeout: 240000 });
     const info = await page.evaluate(() => {
@@ -72,16 +82,17 @@ test("street level drawn triangles are a small fraction of skyline view (culling
   };
 
   try {
-    const skyline = await getTris("Downtown skyline");
-    const street = await getTris("Street level");
+    const on = await getCalls("Street level", 1);
+    const off = await getCalls("Street level", 0);
+    const retained = on.calls / off.calls;
+    console.log(`Frustum culling measurement: Street level ${on.calls} calls with culling, ${off.calls} without (retained ${(retained * 100).toFixed(2)}%)`);
 
-    const ratio = street.triangles / skyline.triangles;
-    console.log(`Culling ratio measurement: Street=${street.triangles.toLocaleString()} (${street.calls} calls), Skyline=${skyline.triangles.toLocaleString()} (${skyline.calls} calls), Ratio=${(ratio * 100).toFixed(2)}%`);
-
-    // Target: Street level must draw less than 40% of the skyline view triangles.
+    // Culling must discard a real fraction of draw calls, not merely avoid
+    // drawing everything. 90% is a floor derived from "less than a 10%
+    // reduction is not meaningfully culling," not from today's measurement.
     assert.ok(
-      ratio < 0.40,
-      `Culling failed: Street level draws ${(ratio * 100).toFixed(1)}% of skyline triangles (${street.triangles.toLocaleString()} vs ${skyline.triangles.toLocaleString()}). Must be < 40%.`
+      retained < 0.90,
+      `Culling failed: Street level retains ${(retained * 100).toFixed(1)}% of draw calls with culling on vs off (${on.calls} vs ${off.calls}). Must discard >=10%.`
     );
   } finally {
     await browser.close();

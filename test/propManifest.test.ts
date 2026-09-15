@@ -13,61 +13,18 @@
 // =============================================================================
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
 
 import { PROPS, propFootprint, hardPropIds } from "../public/prop-manifest.js";
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-function findPublic(): string {
-  let dir = HERE;
-  for (let up = 0; up < 6; up++) {
-    const c = join(dir, "public");
-    try { readFileSync(join(c, "world-scale.js"), "utf8"); return c; } catch { /* keep walking */ }
-    dir = join(dir, "..");
-  }
-  throw new Error("could not locate public/ from " + HERE);
-}
-const RENDER = readFileSync(join(findPublic(), "city-render.js"), "utf8");
-
-test("every fixed-size prop's footprint matches the geometry the renderer builds", () => {
-  // Read the real constructor arguments out of city-render.js and compare. The
-  // pairs below name the geometry call that DEFINES each prop; if that call
-  // changes shape or disappears, this fails and says which.
-  const CHECKS: Array<{ id: string; re: RegExp; foot: (n: number[]) => { w: number; d: number } }> = [
-    // BoxGeometry(w, h, d) -> ground is w x d
-    { id: "bench",      re: /BoxGeometry\(1\.8,\s*0\.45,\s*0\.55\)/,  foot: () => ({ w: 1.8, d: 0.55 }) },
-    { id: "busShelter", re: /BoxGeometry\(3\.6,\s*2\.5,\s*1\.4\)/,    foot: () => ({ w: 3.6, d: 1.4 }) },
-    { id: "container",  re: /BoxGeometry\(12,\s*2\.6,\s*2\.6\)/,      foot: () => ({ w: 12, d: 2.6 }) },
-    { id: "railTie",    re: /BoxGeometry\(3\.2,\s*0\.35,\s*0\.42\)/,  foot: () => ({ w: 3.2, d: 0.42 }) },
-    // CylinderGeometry(rTop, rBottom, h, ...) -> ground is the WIDER radius x2
-    { id: "bin",        re: /CylinderGeometry\(0\.32,\s*0\.28,\s*1(?:\.0)?,/, foot: () => ({ w: 0.64, d: 0.64 }) },
-    { id: "mooring",    re: /CylinderGeometry\(0\.22,\s*0\.28,\s*1,/,         foot: () => ({ w: 0.56, d: 0.56 }) },
-    { id: "beacon",     re: /CylinderGeometry\(1\.4,\s*2\.0,\s*9,/,           foot: () => ({ w: 4.0, d: 4.0 }) },
-    { id: "lampPost",   re: /CylinderGeometry\(0\.22,\s*0\.3,\s*9,/,          foot: () => ({ w: 0.6, d: 0.6 }) },
-  ];
-
-  const missing: string[] = [];
-  const wrong: string[] = [];
-  for (const c of CHECKS) {
-    if (!c.re.test(RENDER)) {
-      missing.push(
-        `${c.id}: no geometry in city-render.js matches ${c.re}. Either the prop ` +
-        `changed size and prop-manifest.js was not updated, or it moved and this ` +
-        `check needs repointing. Do not "fix" this by deleting the check.`,
-      );
-      continue;
-    }
-    const want = c.foot([]);
-    const got = PROPS[c.id].foot;
-    if (!got || got.w !== want.w || got.d !== want.d) {
-      wrong.push(`${c.id}: manifest says ${JSON.stringify(got)}, geometry says ${JSON.stringify(want)}`);
-    }
-  }
-  assert.deepEqual(missing, [], missing.join("\n  "));
-  assert.deepEqual(wrong, [], `prop-manifest.js disagrees with the geometry:\n  ${wrong.join("\n  ")}`);
-});
+// BLOCKED, 2026-09-14, Phase 1 "take it all down"
+// (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md), discovered while merging
+// main's takedown into this lane. This test's own subject was two files,
+// both now quarantined: public/city-render.js (the source it read to find
+// the real geometry calls) and public/prop-models.js (propGeometry(),
+// checked against three props migrated to the shared registry). Neither
+// survives. The other four tests below exercise public/prop-manifest.js
+// alone -- unaffected by the takedown -- and stay live.
+test("every fixed-size prop's footprint matches the geometry the renderer builds", { skip: "BLOCKED: public/city-render.js and public/prop-models.js are both quarantined (see comment above)" }, () => {});
 
 test("a lamp's head may overhang, but its post may not pass through anything", () => {
   // The reason `foot` and `sweep` are separate fields. If someone collapses them

@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CALIPER — overview massing bake</title>
+<meta name="description" content="I2: the overview's massing bake -- built content as merged volumes, not buildings, per REBUILD-PLAN.md W4. Not a product page -- docs/briefs/OVERNIGHT-BLD-2026-09-14.md's own proof.">
+<style>
+  html, body { margin: 0; height: 100%; background: #0b1016; overflow: hidden; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<a href="./index.html" class="back-to-caliper" aria-label="Back to CALIPER"
+   style="position:fixed;top:14px;left:14px;z-index:9999;display:inline-flex;align-items:center;gap:7px;
+          padding:7px 13px;border-radius:11px;text-decoration:none;font:600 12px/1 system-ui,sans-serif;
+          letter-spacing:.02em;color:#e8e4de;background:rgba(22,20,18,.82);border:1px solid rgba(255,255,255,.16);
+          backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);box-shadow:0 6px 20px rgba(0,0,0,.4)">
+  <span aria-hidden="true">&#8592;</span> CALIPER
+</a>
+<script type="importmap">
+{"imports":{"three":"./vendor/three/three.module.min.js"}}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { mergeGeometries } from "./vendor/three/addons/utils/BufferGeometryUtils.js";
+import { PIECES, LAYOUT_BOUNDS, GROUND, loadPieceGeometry, fitToFootprint } from "./look-proof-pieces.js";
+
+// I2 -- THE OVERVIEW'S MASSING BAKE. REBUILD-PLAN.md W4: the overview is
+// "the same terrain heightfield... Built content as massing, not as
+// buildings -- merged volumes whose height and footprint follow what is
+// actually built there... re-baked when the player leaves an area."
+//
+// This scene bakes massing for the SAME 20 pieces L12 already proved --
+// not a second, invented set -- so the triangle/byte savings reported
+// below are a real comparison against a real detailed scene, not a
+// comparison against a strawman. Each piece's REAL height is measured
+// from its own loaded geometry (the same fitToFootprint scaling L1-L12
+// already use, capped the same way), never guessed from its footprint
+// class -- a 2x2 house and a 2x2 commercial building do not have the
+// same real height, and massing that assumed they did would misrepresent
+// "what is actually built there."
+//
+// WHAT THIS DOES NOT DO: re-bake on leaving an area. There is no area
+// system on this branch to leave (BO1, the world layer, is on
+// origin/world-layer / origin/main, not yet merged into codex-lane as of
+// this run -- confirmed by `git log origin/main --oneline` during this
+// same session's own BO7A gate check). This proves the BAKE -- real
+// massing geometry from real built content -- not the re-bake-on-exit
+// trigger, which needs an area to exit.
+
+async function main() {
+  const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true, preserveDrawingBuffer: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(1);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 0.95;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  document.body.appendChild(renderer.domElement);
+  window.__renderer = renderer;
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x0b1016);
+
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 500);
+  const layoutCenterX = LAYOUT_BOUNDS.totalWidth / 2;
+  const layoutCenterZ = LAYOUT_BOUNDS.totalDepth / 2;
+  camera.position.set(layoutCenterX - 95, 230, layoutCenterZ - 95);
+  camera.lookAt(layoutCenterX, 0, layoutCenterZ);
+
+  // Measure each piece's REAL scaled height by loading its real geometry
+  // -- the same detailed mesh L12 renders -- and reading the bounding box
+  // AFTER fitToFootprint's own scale (including its height cap). The
+  // detailed geometry is then discarded; only the measured height number
+  // survives into the massing box.
+  const pieceGeoms = await Promise.all(PIECES.map((p) => loadPieceGeometry(p.glb)));
+  const massingBoxes = pieceGeoms.map((geom, i) => {
+    const p = PIECES[i];
+    fitToFootprint(geom, p.footprint, p.anchor);
+    geom.computeBoundingBox();
+    const realHeight = geom.boundingBox.max.y - geom.boundingBox.min.y;
+    const box = new THREE.BoxGeometry(p.footprint[0], realHeight, p.footprint[1]);
+    box.translate(
+      p.anchor[0] + p.footprint[0] / 2,
+      realHeight / 2,
+      p.anchor[1] + p.footprint[1] / 2,
+    );
+    return { geometry: box, realHeight, triangleCount: box.index ? box.index.count / 3 : box.attributes.position.count / 3 };
+  });
+
+  const groundGeom = new THREE.PlaneGeometry(GROUND.footprint[0], GROUND.footprint[1], 1, 1)
+    .rotateX(-Math.PI / 2)
+    .translate(GROUND.anchor[0] + GROUND.footprint[0] / 2, 0, GROUND.anchor[1] + GROUND.footprint[1] / 2);
+
+  const merged = mergeGeometries([groundGeom, ...massingBoxes.map((b) => b.geometry)], false);
+  // Flat, desaturated massing material -- W4's own wording for locked
+  // areas ("desaturated, no built content, legible as dormant") applied
+  // here to BUILT massing instead: a coarse overview reads as an
+  // abstraction of the city, not a second detailed render, and should
+  // not compete visually with the real scene it stands in for.
+  const massingMaterial = new THREE.MeshLambertMaterial({ color: 0x8a94a6 });
+  const mesh = new THREE.Mesh(merged, massingMaterial);
+  scene.add(mesh);
+
+  const light = new THREE.DirectionalLight(0xffffff, 2.2);
+  light.position.set(20, 40, 30);
+  scene.add(light);
+  scene.add(new THREE.AmbientLight(0x556070, 1.0));
+
+  renderer.render(scene, camera);
+  window.__ready = true;
+
+  const detailedTriangleCount = 32355; // L12's own measured figure, docs/GATE-LEDGER.jsonl item L12.
+  const massingTriangleCount = renderer.info.render.triangles;
+  window.__massingStats = {
+    pieceCount: PIECES.length,
+    massingTriangleCount,
+    detailedTriangleCount,
+    triangleReduction: 1 - massingTriangleCount / detailedTriangleCount,
+    drawCalls: renderer.info.render.calls,
+    perPieceHeights: massingBoxes.map((b, i) => ({ id: PIECES[i].id, realHeightMetres: +b.realHeight.toFixed(2) })),
+  };
+  console.log("MASSING-BAKE-STATS", JSON.stringify(window.__massingStats));
+}
+
+main().catch((e) => { console.error(e); window.__ready = "error"; });
+</script>
+</body>
+</html>

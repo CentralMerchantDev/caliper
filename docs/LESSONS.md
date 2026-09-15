@@ -392,3 +392,234 @@ test/run.mjs` → the 6 roadkit cases present and passing, full suite
 zero-tests-registered check in `test/run.mjs` — does not exist yet and
 this entry stays open until it does and has been watched red against a
 reintroduced case of this same bug.
+
+---
+
+### 2026-09-09 · A mutation test's own regex matched a comment describing the code, not only the code
+
+**WHAT WAS MISSED** `test/navPad.test.ts`'s new assertion for U1's
+live-position fix checked `assert.match(html, /trackLiveRect\(navPadEl,/, ...)`
+— meant to confirm `index.html`'s bottom module script actually calls the
+shared tracker against the pad. The mutation-test proof (rename the call to
+`trackLiveRectXXX`) was run to watch it fail before trusting it, following
+this project's own standing rule. It did not fail. The regex was still
+satisfied — by a comment, six lines above the real call, that described the
+mechanism in near-identical call syntax: `"...bottom module script's
+trackLiveRect(navPadEl, ...) call overrides both..."`. A test written to
+prove a specific line of code exists was, in practice, proving a *sentence
+about* that code exists, and the two had silently become different claims
+the moment someone (this session, this same lane) wrote a comment that
+happened to look like the thing it described.
+
+**WHY IT GOT THROUGH** The mutation-test discipline was followed correctly
+— red-first was actually attempted, not skipped — and it still passed
+green on the first attempt, because the *assertion itself* could not tell
+code from prose about code. This is a sharper case of the exact pattern
+this session's own audit work was, at the same time, writing up elsewhere
+in this file and in commit messages: a check that reads as proving a
+property while actually proving something adjacent and weaker. Committing
+runs of red-first discipline correctly is not sufficient if the assertion
+underneath it has a blind spot the discipline itself cannot see.
+
+**How this was actually caught**: by the discipline working exactly as
+designed — the mutation was applied, the test was run, and it passed when
+it should not have. That mismatch was the signal, not a separate
+inspection. Read `git grep`-style for every place `trackLiveRect(navPadEl,`
+appears in the file and found two: the real call, and the comment.
+
+**THE CONTROL** Reworded the comment to describe the mechanism without
+reproducing its call syntax (`"...call into live-position.js's tracker
+overrides..."` instead of the literal `trackLiveRect(navPadEl, ...)`
+phrase). Re-ran the same mutation: now correctly caught. This fixes the one
+instance. **Not yet built**: a general check that a source-matching test's
+regex does not ALSO match inside a comment block near the real call — e.g.
+stripping `/* ... */` and `//` comment spans from the haystack before
+matching, in a shared test helper every string-based `assert.match(html,
+...)` check in this suite could use instead of matching raw source. This
+project's own tests do this kind of raw-source string matching often
+(`navPad.test.ts`, `navWheel.test.ts`, and others) — the same blind spot
+plausibly already exists elsewhere, unfound, because it was never looked
+for as a category.
+
+**STANDING WARNING, recorded per Mark's instruction because this is now the
+fifth time in one week a mutation check has caught a test rather than
+code**: A REGEX OVER SOURCE MATCHES YOUR COMMENTS TOO. Any assertion of the
+shape `assert.match(sourceText, /literalCodePattern/)` is a claim about the
+FILE'S TEXT, not about the CODE — and a comment that describes code well is,
+to a regex, indistinguishable from the code it describes. Writing the
+comment in different words than the call it documents is not pedantry; it
+is the only thing that keeps the assertion honest.
+
+**STATUS** **CLOSED**, 2026-09-09 overnight (`codex-lane`). The general
+control is [`test/stripSourceComments.ts`](../test/stripSourceComments.ts):
+strips both `//` line comments and `/* */` block comments (the original
+instance's bug was a block comment specifically, which is why a `//`-only
+helper would not have been enough), blanking rather than deleting so
+existing `indexOf()`/`slice()` offsets downstream keep working.
+
+**It was not built from nothing.** While locating every raw-source
+`assert.match` check in this suite to sweep, `test/isolate.test.ts` was
+found to already carry a local, `//`-only `stripLineComments`, with a
+comment on it recording that it was written after this *exact* bug
+class defeated an unprotected check there first (a comment-out mutation
+of `this._restoreIsolateState();` left the string intact) —
+`test/movePiece.test.ts` had a byte-identical copy. Neither was shared,
+and neither reached `test/navPad.test.ts`, which is how the same bug was
+found a third time, independently, days later. Textbook Failure pattern D:
+an enumerated instance fixed twice while a sibling instance — here, the
+literal absence of a shared module — went unrecorded. Both duplicates now
+import the shared helper instead of defining their own.
+
+**Swept into:** `test/navPad.test.ts`, `test/navWheel.test.ts`,
+`test/isolate.test.ts`, `test/movePiece.test.ts`, `test/lookPipeline.test.ts`,
+`test/describeRequestUI.test.ts` (this one guards an XSS-relevant property —
+`.innerHTML` never receives visitor-typed text — so the same blind spot
+here was worth closing in both directions: a comment could have hidden a
+real regression, or wrongly failed a correct one), the one HTML-diffing
+check in `test/evidence-forwarding.test.ts`, the `test/run.mjs` alias check
+in `test/threeIsSingle.test.ts`, and the `mutate.mjs` harness checks in
+`test/repoHygiene.test.ts`. **Reviewed and deliberately excluded**, with a
+reason each: `test/publicClaims.test.ts` and
+`test/generatedClaimsAreCurrent.test.ts` match computed diff messages, not
+source-with-comments; `test/duplicateKeys.test.ts` matches an analysis
+function's return value, not raw file text; `test/reachability.test.ts`'s
+`data-menu="build"` check and `test/threeIsSingle.test.ts`'s import-spec
+scan are markup/string scans where a false match would read as an
+*extra*, wrongly-loud failure, not a silent wrongly-quiet pass — the
+opposite risk direction from what this entry is about; `.gitattributes`
+checks in `test/repoHygiene.test.ts` are immune by construction (its `#`
+comment syntax can't satisfy their `^\*`-anchored patterns).
+
+**Watched red, for real, in a file other than the one that found it.**
+`public/nav-wheel.js`'s real `trackLiveRect(hub, ...)` call (line 91) was
+renamed to `trackLiveRectDISABLED` and a comment reproducing the exact
+original call syntax was left directly above it — the AUDIT-PROTOCOL
+disabling-mutation pattern, applied here on purpose. Against that mutation:
+the **protected** `test/navWheel.test.ts` correctly failed —
+`AssertionError: the ring does not track the hub's live position via
+trackLiveRect`. Reverting the same test's check back to raw, unstripped
+`src` (temporarily, to demonstrate the counterfactual) against the
+identical mutated file produced 6/6 passing, including that exact test —
+proving the old shape of this check would have shipped the regression
+silently, in this file, not only in the one that first found the bug.
+Both files were then restored and verified byte-identical to their
+pre-mutation state (`md5sum`, matched; `git diff` on `public/nav-wheel.js`,
+empty). `node test/run.mjs stripSourceComments.test.ts navPad.test.ts
+navWheel.test.ts isolate.test.ts movePiece.test.ts lookPipeline.test.ts
+describeRequestUI.test.ts evidence-forwarding.test.ts threeIsSingle.test.ts
+repoHygiene.test.ts` — 64/64 green on the restored tree. `npx tsc --noEmit`
+clean. The full suite was not re-run tonight — host memory sat at 2.47–3.99
+GB through this work, this project's own 4 GB floor, so a 1087-test full
+run (documented elsewhere as OOM-risking at module scope) was deferred
+rather than attempted below the floor; the 64 tests above are every test
+in every file this change touched.
+
+---
+
+### 2026-09-09 · A hand-written string hash passed by eye and failed on the exact input shape this codebase actually uses
+
+**WHAT WAS MISSED** `public/facade-textures.js`'s new `pickVariant`
+(RUN2 item 1, facade atlas variety) needed a deterministic
+`character + variantSeed → [0, N)` selector. The first version was a plain
+polynomial accumulator, `h = h*31 + charCode`, `% 100000`. Written, read
+back, and it looked fine — a standard textbook string hash. It was not
+tested against the actual shape of a real seed until the test that would
+prove it worked was written.
+
+**WHY IT GOT THROUGH, then didn't** `test/facadeVariants.test.ts`'s
+distribution check (`SAMPLE_SEEDS = "sample-0".."sample-39"`) went red on
+its first real run: `postwar: 40 sample seeds only ever reached 1 distinct
+variant`. A polynomial hash that only accumulates by `*31 + charCode`
+barely changes between strings differing in one trailing digit —
+`"postwar|sample-8"` and `"postwar|sample-9"` differ by exactly 1 before
+the final `% 100000`, so both land in the same third of `[0,1)` almost
+every time. This is not a corner case for this codebase: every `bld*`
+function's own default seed is exactly this shape (`"terrace-0"`,
+`"terrace-1"`, ...), and `layout.js`'s real per-plot seeds are built the
+same sequential way. A hash that looks fine on scattered test strings and
+fails specifically on the input pattern the codebase actually produces is
+worse than one that fails everywhere — it would have shipped clustering
+almost every real building onto variant 0 anyway, silently defeating the
+entire feature while `each character has at least 3 variants` and every
+other structural test still passed green.
+
+**THE CONTROL** [`test/facadeVariants.test.ts`](../test/facadeVariants.test.ts)'s
+`"different variant seeds reach different variants"` test, run against
+40 sequentially-suffixed sample seeds per character — not scattered random
+strings, the exact repetitive shape real seeds take. `hash01` was replaced
+with FNV-1a (`h ^= charCode; h = Math.imul(h, 0x01000193)`), which mixes
+every byte through a multiplication rather than only adding it, and the
+same test now reaches 2–3 distinct variants per character across the same
+40 samples. Watched red first (the polynomial version), fixed, watched
+green — not assumed safe from reading the replacement formula's reputation
+either.
+
+**STATUS** **CLOSED.** Found by the test on its first real run, not by
+audit or by a deliberately-planted mutation — the ordinary case CLAUDE.md's
+standard of proof describes ("write the test first... watched failing") is
+also the case that already caught this. `git diff` on
+`public/facade-textures.js` before committing confirmed only `hash01`'s
+body changed, nothing else. **General lesson, stated for the next hash
+someone writes by hand in this codebase**: a hash function is not verified
+by reading its formula or by trying it on a handful of unrelated strings —
+verify it against the actual, often repetitive/sequential shape of the
+real inputs it will receive (`"x-0"`, `"x-1"`, ...), because that is
+exactly the shape naive accumulator hashes are weakest against, and it is
+exactly the shape seeds, ids, and keys take throughout this project.
+
+---
+
+### 2026-09-09 · A helper's own docstring claimed an offset-preservation guarantee that was only ever true for half of what it strips
+
+**WHAT WAS MISSED** `test/stripSourceComments.ts` (closed above, `bac6c1b`)
+documents that it "blanks" comments rather than deleting them specifically
+"so existing `indexOf()`/`slice()` offsets downstream keep working." That
+was true for `/* */` block comments (replaced character-for-character with
+spaces) and false for `//` line comments, which the same function
+*truncated* (`line.slice(0, i)`) — shortening the line, which shifts every
+position after it. Every caller written against this helper so far
+(`navPad`, `navWheel`, `isolate`, `movePiece`, `lookPipeline`,
+`describeRequestUI`, `evidence-forwarding`, `threeIsSingle`, `repoHygiene`)
+only ever computed offsets by searching the *already-stripped* text and
+using them within that same string, so the bug had no way to surface.
+
+**WHY IT GOT THROUGH** RUN2 item 4 (finishing the comment-stripping sweep
+as a category) added `test/pickSelection.test.ts`, whose existing
+`I3 (wiring)` test does something none of the nine prior callers needed:
+it finds an anchor position by searching the RAW text for a section-header
+*comment* (`"CITY MODE PICKS AGAINST THE SCENE"` — the anchor has to be
+a comment, since that is what the real file uses to mark the section), then
+slices the *stripped* text at that same offset to check the code beneath
+it. This is exactly the offset-correlation the docstring already promised
+and nothing had tested. The test failed immediately with "could not find
+the city-mode pick handler by its own comment" (because stripping had
+blanked the very anchor text being searched for in the raw string — fixed
+by searching the raw text on purpose, which is correct) and then, once
+that was fixed, failed a second time in a way that pointed straight at the
+real bug: the sliced region was empty/misaligned, because a `//` comment
+earlier in the 5,000-line file had truncated a line and shifted every
+offset downstream of it in the stripped copy relative to the raw one.
+
+**THE CONTROL** `stripSourceComments`'s line-comment branch now pads with
+spaces to the original line length instead of truncating
+(`line.slice(0, i) + " ".repeat(line.length - i)`), matching the block-
+comment branch's already-correct behaviour. A new direct unit test in
+`test/stripSourceComments.test.ts` asserts the property by name: stripping
+must not change the string's overall length, and a position found in the
+raw text must reference the same content in the stripped text. Watched red
+first, for real, twice over: the failing padding formula was reverted to
+the original truncating one and both the new unit test AND
+`test/pickSelection.test.ts`'s real-file test failed together for the
+matching reason; restored (`md5sum` matched) and reverified green, along
+with the other ten files that already used this helper (78/78 green,
+confirming the length-preserving change is not merely locally safe but
+does not alter any existing caller's result either).
+
+**STATUS** **CLOSED.** Found by writing a new, legitimate use of an
+existing helper, not by an audit — the same shape as the hash entry just
+above it: a control's own claim about itself was untested for the one
+case that would have exercised it, and the very next real caller did.
+**General lesson**: a "should still work the same way" docstring claim
+about a shared helper is a hypothesis, not a fact, until a second, different
+kind of caller actually exercises the part of the claim the first caller
+never needed.

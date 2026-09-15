@@ -1,0 +1,31 @@
+Overnight: the full-suite run's own regression gate reproduced decision
+#4's already-queued skyline-culling defect -- recorded promptly, not held
+for a final summary, and not re-diagnosed (that work already belongs to
+decision #4)
+
+What was found. Inside this session's full node test/run.mjs run (item 0),
+A5.2 & A5.3 (the regression gate) measured "Downtown skyline: 1 calls, 12
+triangles" and culling retained "Skyline 100.00%, Harbour 66400.00%" --
+RED. This is docs/DECISIONS-FOR-MARK.md's decision caliper #4 verbatim, a
+real, already-named, not-yet-traced defect -- reproduced here, not
+discovered here.
+
+Why this is recorded as a contrast, not a contradiction, with item 2's own
+verification. This session's standalone `node test/run.mjs
+regressionGate.test.ts` run, completed earlier as part of item 2's own
+verification, passed cleanly on the identical committed code: "Downtown
+skyline: 857 calls, 203,338 triangles", culling 60.31%. Same test, same
+code, two different results in the same session. Consistent with decision
+#4's own framing (a real, untraced defect) plus host contention -- two
+node test/run.mjs processes were confirmed running concurrently at the
+time (see the separate process finding, commit 780128a), and this exact
+gate's own code comment already states it does not synchronize GPU
+completion and reads whatever samples are available when readiness
+signals -- exactly the kind of measurement a contended host would corrupt.
+
+What was NOT done. Not re-diagnosed further -- decision #4 already owns
+tracing this defect's root cause, and duplicating that work here was out
+of scope for tonight's items. Recorded because this is the first time an
+isolated run and a full-suite run of the identical commit have been seen
+to diverge on this specific gate, which is new information for whoever
+traces #4 next, not a new decision to queue.

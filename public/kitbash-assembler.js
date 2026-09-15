@@ -11,6 +11,7 @@
 
 import * as THREE from "./vendor/three/three.module.min.js";
 import { KITBASH_PARTS } from "./kitbash-parts.js";
+import { DESIGN_RECIPE_MAP } from "./kitbash-recipe-map.js";
 import { getFacadeMaterial } from "./facade-textures.js";
 
 /**
@@ -183,6 +184,82 @@ export function assembleBuilding(options = {}, T = THREE) {
     recipe,
     height: currentY,
     foot,
+    parts: assembledParts,
+    triangleCount: countTriangles(assembledParts),
+  };
+}
+
+/**
+ * Assembles one of the 40 canonical library designs from
+ * kitbash-recipe-map.js's DESIGN_RECIPE_MAP by actually building and
+ * stacking its named `recipe` array, part by part.
+ *
+ * RUN2 item 3's finding: DESIGN_RECIPE_MAP's `recipe` field existed, was
+ * structurally validated by test/kitbashRecipeMap.test.ts (every part id
+ * resolves, no dangling references), and was imported into
+ * public/kitbash-district.html -- and then never read again anywhere. The
+ * only executable path, assembleBuilding() above, picks parts at random by
+ * socket compatibility and never consults a design's curated recipe at
+ * all. Measured directly (not assumed): across 60,000 assembleBuilding
+ * trials spanning every style/foot combination, the entire "connector"
+ * category -- all 8 parts, ~13% of the 62-part registry -- was never
+ * reached, because assembleBuilding never calls getMatchingParts("connector",
+ * ...). Every other category IS reachable via assembleBuilding's random
+ * path even though named-recipe execution didn't exist; connectors were
+ * the one category that only ever appeared in a recipe array nothing ran.
+ *
+ * Unlike assembleBuilding's fixed four-slot (podium/shaft/crown/roof)
+ * stack, a design's recipe can be any length in any order (`'geodetic-eco-
+ * home'`'s recipe is a single crown; `'skybridge-complex'`'s recipe
+ * interleaves a connector between a shaft and a crown) -- so this stacks
+ * generically by iterating the recipe array and accumulating Y offset by
+ * each part's own declared height, the same mechanism assembleBuilding
+ * already uses per-slot, generalised to any sequence.
+ */
+export function assembleNamedDesign(designId, options = {}, T = THREE) {
+  const design = DESIGN_RECIPE_MAP[designId];
+  if (!design) {
+    throw new Error(`assembleNamedDesign: "${designId}" is not a canonical design in DESIGN_RECIPE_MAP`);
+  }
+  const { lod = 0, palette = {} } = options;
+  const character = palette.character || (design.rarity === "landmark" ? "contemporary" : "interwar");
+  const buildingFacade = getFacadeMaterial(character, {
+    wallColor: palette.wallColor,
+    night: palette.night === true,
+  });
+  const curtainFacade = getFacadeMaterial("contemporary", { night: palette.night === true });
+  const materialFor = (part) => part.material || (part.tag === "wall" ? buildingFacade : part.tag === "glass" ? curtainFacade : undefined);
+
+  const assembledParts = [];
+  let currentY = 0;
+  for (const partId of design.recipe) {
+    const part = KITBASH_PARTS[partId];
+    if (!part) {
+      // Refuse loudly, matching this project's standard of proof: a design
+      // that names a part which no longer exists in the registry is a real
+      // defect, not something to silently skip and build partially.
+      throw new Error(`assembleNamedDesign: "${designId}" references unknown part "${partId}"`);
+    }
+    const geos = part.buildGeometry(T, palette, lod);
+    for (const g of geos) {
+      assembledParts.push({
+        geo: g.geo.clone().translate(0, currentY, 0),
+        tag: g.tag,
+        color: g.color,
+        material: materialFor(g),
+        facadeCharacter: g.facadeCharacter,
+      });
+    }
+    currentY += part.height;
+  }
+
+  return {
+    name: design.name,
+    recipe: design.recipe,
+    rarity: design.rarity,
+    category: design.category,
+    height: currentY,
+    foot: design.foot,
     parts: assembledParts,
     triangleCount: countTriangles(assembledParts),
   };

@@ -1,0 +1,16 @@
+Overnight handover: record the session-2 correction (COMPLETION-PLAN.md
+PART 2, not K6-BUILDINGS.md, is the real lane checklist), the host-load
+reversal, housekeeping, and F3's summary in
+docs/audits/OVERNIGHT-BLD-2026-09-11.md
+
+What this commit is. Documentation only. Records: Mark's correction that
+K6-BUILDINGS.md is F2's own sub-checklist, not the whole lane's, and that
+docs/specs/COMPLETION-PLAN.md's PART 2 (b1-land only, read read-only) is
+the real one, confirming F3 and F4 both unstarted; the host-load
+instruction reversal (no full suite tonight, targeted files only, stated
+per commit); a summary of the housekeeping commit (842f1c2); and a summary
+of F3's own commit (e4e181d) -- the two kitbash reachability numbers side
+by side, the third "over-exported but not dead" bucket found while
+classifying precisely, and the gate evidence.
+
+What is still open. F4, next.

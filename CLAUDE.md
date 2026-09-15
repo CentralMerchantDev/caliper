@@ -88,7 +88,17 @@ Derived artefacts are generated, not hand-edited:
 `node scripts/gen-city-summary.mjs`, `node scripts/gen-test-count.mjs`.
 The public page's numbers are pinned against them by
 `test/publicClaims.test.ts`, because that sentence has gone stale three times
-while claiming it was read from the runner.
+while claiming it was read from the runner. `npm run gen:claims` runs every
+generator in one command (`scripts/gen-claims.mjs`).
+
+**Before proposing to build a capability, read
+[docs/MODULE-MAP.md](docs/MODULE-MAP.md).** It may already exist, built, and
+unwired — nine recorded instances of exactly that in
+[docs/AUDIT-PROTOCOL.md](docs/AUDIT-PROTOCOL.md)'s failure pattern E. The map
+is generated (`node scripts/gen-module-map.mjs`, part of `gen:claims`) from
+the same reverse-caller graph `test/deadExports.test.ts` gates on; if
+something you're about to build already has an export sitting in there
+UNCALLED, wire that instead of writing it again.
 
 ## Rules that are not negotiable
 
@@ -102,6 +112,16 @@ while claiming it was read from the runner.
 - **Never display visitor-typed text as HTML.**
 - **Do not touch `tick`, `chooseAction`, `applyAction`.**
 - **The nine regression checks pass unedited.**
+- **Lanes do not kill processes.** Command line, start time, and "nothing is
+  listening on the port" are a strong inference, not ownership — on a machine
+  shared with concurrent lanes, a strong inference is not the standard. If
+  memory is short, name the PIDs, the command lines, and the reasoning, and
+  stop. Mark is at the keyboard; he knows which terminals are his and it costs
+  him five seconds. You keep the finding and lose only the action. (Once
+  actually done here: three orphaned `wrangler dev` processes were correctly
+  identified as dead and were the real reason memory sat under this project's
+  4 GB floor for hours — the diagnosis was right and still should have stopped
+  at the report.)
 
 ## Commit messages
 

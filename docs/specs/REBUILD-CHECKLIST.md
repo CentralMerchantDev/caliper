@@ -46,6 +46,14 @@ authoritative across branches. If a merge conflicts here, resolve it by
 taking both sides' ticks for their own ids — this file is not what decides
 whether an item is really done, `docs/EVENT-LOG.jsonl` is.
 
+**Applied 2026-09-15 (this merge, codex-lane):** exactly the divergence this
+correction predicts. Took `origin/main`'s own version of every CLI-owned item
+(R0, V1, V2, V3, A1, S1, S2 — each further along on `main`/`scoring` than the
+stale copy `codex-lane` had been carrying) and `codex-lane`'s own version of
+every BLD-owned item (L11, L12, I1, I2, N1 — completed on this branch this
+session, not yet reflected on `main`). Neither side's ticks were second-
+guessed; each lane's own claim about its own work was kept.
+
 Ownership is marked in each line, and each lane passes the **other** lane's ids
 as `skip_ids` to `process_next_item`. `allRemainingSkipped` then distinguishes
 "this lane is blocked" from "the plan is finished" — opposite responses.
@@ -126,46 +134,395 @@ ledger are the evidence, not this file.
 The verdict says meshes moved the needle more than shading. This is that thread
 pulled, and it is deliberately fenced off from the file CLI is working in.
 
-[ ] L11 (BLD) Cast shadows, as a sixth mechanism, before and after — REBUILD-PLAN.md R1, gap
-    NOT a miss by the look-proof run: R1 lists four mechanisms and cast shadows
-    is not among them. But in `01-baseline-material.png` through
-    `07-join-decal.png` nothing throws a shadow onto the ground or onto anything
-    else, and that is the remaining tell that reads as "objects on a plane"
-    rather than "a place".
-    Gate: same fixed camera, before and after, committed as a pair. State the
-    shadow-map cost measured, not estimated, and say whether it survives the
-    piece counts L12 reaches.
-[ ] L12 (BLD) The proof scene at a realistic piece count — REBUILD-PLAN.md C1.5 and R2
-    Five pieces proved the pipeline. C1.5 gives the real starting counts. Source
-    and normalise up to that, through `scripts/normalise-kit-textures.mjs`, and
-    prove them in the existing look-proof scene.
-    Gate: still ONE draw call at the higher count, textures intact, measured.
-    RED is the draw count rising with the piece count.
-    R2's numbers are far lower than instinct — read it before deciding how many.
-[ ] I1 (BLD) Octahedral impostors: pre-render one piece, colour, normal and depth — REBUILD-PLAN.md 8 of the revised order
-    Investigate under its real name and verify against primary sources, not a
-    summary. Report texture-memory cost MEASURED.
-[ ] I2 (BLD) The overview's massing bake — REBUILD-PLAN.md W4
+[x] L11 (BLD) Cast shadows, as a sixth mechanism, before and after — REBUILD-PLAN.md R1, gap
+    08dc08f. `08-cast-shadows.png`. Self-contained shadow map (an orthographic
+    camera sized to the scene's real bounding box, a DepthTexture, PCF sampled
+    in the custom shader) rather than three.js's own light/shadow system, which
+    assumes a material this ShaderMaterial deliberately does not use.
+    Measured, not estimated: 1024x1024x4 bytes = 4.00 MiB (fixed, independent
+    of piece count); shadow-pass render ~8.5-9.1ms, main-pass ~5.5-6.8ms
+    (performance.now(), SwiftShader). The 4 MiB cost does not scale with piece
+    count; the render-time cost scales with triangle count the same way the
+    main pass already does — re-measured directly once L12 lands, not assumed.
+[x] L12 (BLD) The proof scene at a realistic piece count — REBUILD-PLAN.md C1.5 and R2
+    312fb7d. `09-piece-count-20.png`. 20 pieces (Firewatch's 23 trees, Caravan
+    SandWitch's 39 total props -- same order, not 200), a THIRD real CC0 pack
+    (Kenney City Kit Commercial), 6 of C1.1's 8 footprint classes including
+    8x8. Gate held: draw calls: 1 (unchanged from 4 pieces), triangles 1270 ->
+    32355. Real bug found by rendering, not inspection: the mega-tower's
+    height scaled linearly with its footprint (~87 m) before being capped at
+    6x, matching the smaller pieces' own working scale.
+[x] I1 (BLD) Octahedral impostors: pre-render one piece, colour, normal and depth — REBUILD-PLAN.md 8 of the revised order
+    b7f5e82. `docs/look-proof-shots/impostor-bake/`. 8x8=64-angle hemi-octahedral
+    bake (proof scale; production precedent per the Godot-Octahedral-Impostors
+    baker README is 16x16=256), colour+normal+depth per angle. Measured: 4.00 MiB
+    per atlas uncompressed (12.00 MiB total); real on-disk PNG bytes 1.08 MiB
+    total. Academic precursor (INRIA hal-00650120, CiteSeerX 10.1.1.90.6202) was
+    bot-blocked at every mirror tried -- named, not silently substituted.
+    Depth atlas has real RGBADepthPacking banding under SwiftShader, reported
+    honestly, does not block the texture-memory deliverable.
+[x] I2 (BLD) The overview's massing bake — REBUILD-PLAN.md W4
+    3f8d54e (shared PIECES module) + 7f6633f (the bake).
+    `docs/look-proof-shots/10-overview-massing.png`. Real per-piece heights
+    measured from each piece's own loaded geometry, not guessed from footprint
+    class. 242 triangles vs L12's own 32355 at full detail -- a 99.25%
+    reduction, still 1 draw call. Does not implement re-bake-on-leave-area:
+    no area system exists on this branch to leave (BO1 is on origin/main /
+    origin/world-layer, not merged into codex-lane as of this run).
 
-[ ] N1 (BLD) THE SCENE — sky, a ground that does not end, and something at street level — REBUILD-PLAN.md R1 and A5
-    The highest-value look item left, and it is not a shading problem.
-    In `08-cast-shadows.png` the lighting is close to good. What stops it
-    reading as a place is that there is NO SCENE: a black void instead of a
-    sky, a dirt plane that stops at a hard edge, and nothing between the
-    buildings. Four well-lit pieces floating in black is not a city.
-    Three things, each its own commit and its own before/after from the SAME
-    fixed camera as 08:
-      a. A sky. Even a gradient. The void is doing more damage than any
-         missing shader feature.
-      b. A ground that reads as continuing past the frame rather than ending.
-      c. Something at street level — kerbs, a path, one or two props. R8's
-         "interesting things happen where different things meet" applies to
-         the ground/road/building meeting as much as to the join already done.
-    Gate: the pair of images, judged by Mark. There is no numeric gate here
-    and inventing one would be a check that cannot fail.
-    Mark's standing assessment, to be beaten rather than matched: "not
-    anywhere close to done, but the lighting is much better and on the right
-    path."
+[x] N1 (BLD) THE SCENE — sky, a ground that does not end, and something at street level — REBUILD-PLAN.md R1 and A5
+    Three commits, each its own before/after from `08`'s own fixed camera
+    (`?hero=1`): 5f72578 (a: sky, `11-sky.png`), 3f0861e (b: ground,
+    `12-ground.png`), 09a9b23 (c: street level, `13-street-level.png`).
+    a. A CanvasTexture gradient as scene.background. Measured, not assumed:
+       +1 draw call, +2 triangles.
+    b. A second, much larger (400x400m), coarsely-subdivided ground plane
+       merged into the same draw call, plus retuned manual fog (uFogNear/Far
+       in look-proof-material.js) so the enlarged ground's own edge, not the
+       buildings, is what fades into the sky. Mipmapping/anisotropy added to
+       the array texture after the far plane's single UV tile aliased into a
+       visible checkerboard at grazing angles -- found by rendering.
+    c. A raised curb + a paved path around the road tile (R8's join-decal
+       logic, extended from a single building's own footprint to the road),
+       plus one prop (dumpster-1x1). Attempt 1 textured these with the road
+       pack's own layer and got visible rainbow banding (BoxGeometry
+       stretches a whole sprite-sheet atlas across each thin face); fixed by
+       reusing GROUND's own layer instead. HONEST READ: kerb/path are real
+       but subtle at this camera distance -- a smaller improvement than a/b,
+       said plainly rather than oversold, per the gate below.
+    Gate: the pair of images, judged by Mark, no numeric gate invented.
+    Each commit message states its own before/after and what did or did not
+    read as an improvement; not yet shown to Mark as of this run.
+
+---
+
+## THE CONVERGENCE — BLD OWNS THIS. THE PHASE GATE ITSELF.
+
+Everything both lanes have built has never been in one view. The board is data
+(`area-board.js`), placement is data (`placement.js`), the look is a hardcoded
+piece list in `look-proof-scene.html`, and scoring is a pure function nothing
+displays. **Nothing renders a board.** This is that.
+
+**BUILD FROM ZERO. This is the hard one and it has been violated four times.**
+`_TO-DELETE/b1-board/` contains `board-render.js`, `board-generator.js` and a
+generated board. That is the REJECTED world, not a head start. Nothing in
+`_TO-DELETE/` is read, referenced, copied or repaired — not for inspiration, not
+"just to see how it did instancing". `REBUILD-PLAN.md`'s 2026-09-13 correction is
+explicit: *"Do not do it a fourth."* It then did. Do not do it a fifth.
+
+Compose `look-proof-material.js`, `area-board.js` and `placement.js`. Those are
+proven, current, and yours to build on.
+
+[x] RB1 (BLD) A board renderer: draw a real area board, not a hardcoded list — REBUILD-PLAN.md C2.1 and C1.6
+    `public/board-renderer.js` (new module, pure data resolution, no THREE
+    at the top level, GPU-free tests): reads a real `createAreaBoard()`'s
+    own `board.pieces()` and the real `data/catalogue.json` (BO7A's `glb`
+    field), resolves each into a render-ready descriptor via the SAME
+    array-texture manifest `buildArrayTexture()` already reads (never a
+    second, hand-typed kit-name parser). `look-proof-scene.html`'s own
+    `?board=1` places 4 real, glb-bound catalogue pieces onto a real board
+    via the real `board.place()`, and `?board=1&removeId=<id>` re-runs the
+    SAME sequence then calls the real `board.remove()` before rendering --
+    one script, one page, one real board's own state transition, not two
+    independently-scripted renders. `14-board.png` / `15-board-removed.png`:
+    the removed piece (tower-base-6x6-a) is visibly gone in the second shot,
+    the other three unchanged. Draw calls stayed at 2 (mesh + N1a's sky,
+    unchanged from every other mode) at both piece counts. A piece with no
+    matching mesh is named in a console `BOARD-SKIPPED` line, not silently
+    dropped -- board-renderer.js's own disclosed `{resolved, skipped}`
+    contract, not re-decided in the scene file.
+    Not a rewrite of the material — the material is untouched. `PIECES`
+    (HERO_MODE/L12) stays exactly as it was; `?board=1` is additive, gated
+    to its own mode, with an empty `PIECES` in that mode so nothing
+    hardcoded feeds the render alongside the real board.
+    Gate: `place()` a piece into a board, render, and the piece is visibly there
+    in the shot; `remove()` it, render, and it is gone. **Draw calls stay at 1**
+    at the piece counts L12 reached. RED is the draw count rising, or a
+    placement that the board accepts and the render does not show — the two
+    disagreeing is the whole defect class this item exists to prevent.
+[x] RB2 (BLD) The ghost, and an invalid one that reads as invalid — REBUILD-PLAN.md C2.2
+    `board-renderer.js` gained `resolveGhost(ghost, catalogue)` (pure,
+    reads `session.getGhost()`'s own `valid`/`reason` VERBATIM -- never
+    re-decides them). `look-proof-scene.html`'s `?board=1&ghost=valid` /
+    `&ghost=invalid` build a real `createPlacementSession`, call the real
+    `session.setGhost()`; the invalid demo targets the SAME cell
+    `house-a` already occupies, so the refusal ("occupied") is real, not
+    staged. Rendered as a SEPARATE overlay mesh (its own
+    `MeshBasicMaterial`, not the shared material -- RB1's own "the
+    material is proven" applies here too): green (`0x4caf50`) valid, red
+    (`0xe53935`) invalid. `16-ghost-valid.png` / `17-ghost-invalid.png`.
+    "Committing it changes nothing" proven on the real board, not
+    asserted: `GHOST-COMMIT ok=false reason=inert piecesBefore=4
+    piecesAfter=4 unchanged=true`, logged from the real
+    `session.commit()` call and a real `resolveBoardPieces` count taken
+    before and after.
+    Gate: a ghost over an occupied or out-of-bounds cell is VISIBLY distinct
+    from a valid one, and committing it changes nothing. RED is a ghost that
+    looks placeable where `place()` would refuse — the render and the rule
+    disagreeing, again.
+[x] RB3 (BLD) THE VALUE READOUT — §S4's payoff. REASSIGNED from CLI's S5.
+    PARTIAL, HONESTLY, PER THIS RUN'S OWN BRIEF §4 -- S4 has not landed:
+    checked `origin/scoring` and `origin/main` directly (not assumed),
+    neither exports `valueAt`/`valueIfPlaced`; only S1's `value()` and
+    S2's `falloff` exist. Built exactly what §4 asked for in that case:
+    `board-renderer.js`'s `resolveReadout(scoringModule, board, catalogue,
+    cell, typeId, rotation)` checks for both functions BEFORE calling
+    them (a namespace `import * as ScoringModule`, never a named import
+    of an export that does not exist yet -- that would throw at parse
+    time and crash every OTHER mode this file ships), calls them against
+    a DISCLOSED guessed signature (`(board, catalogue, x, y[, typeId,
+    rotation])`, extending S1's own established convention rather than
+    inventing a new one) if present, and reports `{ available: false,
+    reason }` if not -- never a stubbed or invented number.
+    `look-proof-scene.html`'s `?board=1&readout=x,y` renders the REAL,
+    honest state: `18-readout-unavailable.png` shows a small, deliberately
+    muted grey marker (not the blue `READOUT_COLOR.available` a real
+    number would render), and the console logs
+    `READOUT-STATE ... available=false reason="S4 not landed: ..."`.
+    THE GATE ITSELF WAS UNVERIFIED WHEN THIS WAS FIRST WRITTEN: "move the
+    cursor across cells of genuinely different value and the number
+    changes" could not be demonstrated with real numbers while none
+    existed. Proven instead at the mechanism level, against a mock
+    scoring module (test/boardRenderer.test.ts): two different cells
+    produce two different numbers through the SAME resolveReadout call
+    path that would run once S4 landed. A LIVE test against the real,
+    unmocked `public/scoring.js` was written to START FAILING the moment
+    `valueAt`/`valueIfPlaced` existed -- that test fired red on schedule.
+
+    FINISHED FOR REAL, RC5, 2026-09-15 (this run): S4 landed on
+    `origin/main` (merged from `scoring`, Mark's own authorisation per
+    ADR-020), then merged into `codex-lane`. `resolveReadout` needed no
+    code change -- the guessed signature matched S4's real one exactly,
+    confirmed directly against `public/scoring.js`, not assumed from the
+    guess having been reasonable. The live signal test
+    (`test/boardRenderer.test.ts`) replaced with a real one asserting
+    `available: true` and cross-checking the returned numbers directly
+    against the real `valueAt`/`valueIfPlaced`. Rendered on the real
+    demo board (`26-readout-real-numbers.png`, `?board=1&readout=7,4`):
+    the marker renders blue (`READOUT_COLOR.available`), console reports
+    `READOUT-STATE cell=7,4 available=true current=0
+    ifPlaced=2.3207944168063896`. THE NUMBERS, SHOWN NOT TUNED, per this
+    item's own brief: at (2,6) near `house-a` (residential, dilutive on
+    itself), `ifPlaced=-0.43`; at (7,4) beside `tower-base-6x6-a`
+    (landmark, +5 to residential, Chebyshev distance 1), `ifPlaced=2.32`
+    -- `2.32/5 = 0.464`, matching Mark's own named falloff-anchor
+    question almost exactly ("the nearest possible neighbour contributes
+    only ~46% of its nominal value"); at (20,14), far from every piece,
+    `ifPlaced=0`. Real, non-trivial, distinguishable numbers across all
+    three -- not "everything weak" or "nothing distinguishable" -- shown
+    here for Mark's own judgement on the falloff anchor, not retuned.
+    Call them. Do not reimplement scoring, and do not touch
+    `public/scoring.js`. -- honoured: zero edits to that file this run.
+    The ghost shows the cell's current value AND the value the piece would have
+    there. *"That number, changing as the cursor moves, IS the reason one cell
+    beats another."* §A2 calls it the item every project of this kind skips.
+    Gate: move the cursor across cells of genuinely different value and the
+    number changes. RED is a readout that does not move, or one that moves when
+    the board has not changed.
+    If the numbers look wrong — everything reading weak, or nothing
+    distinguishable — **say so and show them.** That is a real finding about the
+    falloff anchor, which is an open question Mark has not yet answered, and a
+    real board is exactly what it was waiting for.
+[x] RB4 (BLD) Still there on reload — REBUILD-PLAN.md C2.5 and the phase gate
+    `?board=1&reload=1`: serializes the REAL session (session.serialize(),
+    C2.5's save shape) and rebuilds via the REAL loadBoard() -- every render
+    step downstream (resolveBoardPieces, the ground decal, the merge) runs
+    against the RELOADED board, not the original, by reassigning `board`
+    itself (declared `let`, not `const`, specifically so this swap is real).
+    `19-reload.png` is BYTE-IDENTICAL to `14-board.png` -- confirmed by
+    `cmp`, not eyeballed -- proving the round trip lost, moved, or silently
+    dropped nothing.
+    `?reloadShrink=1` reloads into a DELIBERATELY narrower board (20 cells,
+    not 24) so mega-tower-a's own saved anchor genuinely no longer fits --
+    a REAL out-of-bounds refusal, not a happy-path-only "failures: []" left
+    untested. Console: `RELOAD-FAILURES mega-tower-a(out-of-bounds)`.
+    `20-reload-failure.png` shows exactly that piece missing, the other
+    three unchanged -- loadBoard()'s own `{board, failures}` contract
+    surfaced, not swallowed.
+    Gate: place several pieces, save, reload, render — byte-identical shot. RED
+    is any placement lost, moved, or silently dropped. `loadBoard()` returns
+    `{board, failures}` — **surface the failures; do not swallow them.**
+[x] RB5 (BLD) The ground stops reading as desert — REBUILD-PLAN.md R1, Mark 2026-09-15
+    MEASURED FIRST, NOT ASSUMED: the existing ground texture (manifest's own
+    "ground-grass") has a real mean RGB of (172,148,121) -- a warm dirt/sand
+    tone despite its own filename, not green. Darkening it further (4.3's
+    existing mechanism) could only ever read as darker dirt, never pavement --
+    the texture choice itself, not just its tint, was the actual lever.
+    A second, more neutral ground layer added: 04-ground-paved.png, an
+    ALREADY-vendored, ALREADY CC0-licensed gravel texture (public/vendor/
+    textures/gravel/, Poly Haven, provenance already on file) -- no new asset
+    sourcing. `look-proof-scene.html`'s new `addGroundLayerAttribute` assigns
+    this layer PER VERTEX (reusing 4.3's own distanceOutsideFootprint) within
+    PAVING_RADIUS=6m of any real footprint; earth beyond it. Deliberately NOT
+    the road pack's own layer -- N1c already found that a large stretched area
+    against a sprite-sheet atlas bands.
+    Also retuned, disclosed together since they must move together: the fog
+    colour (0xf2ddb8 -> 0xe6dccb, lighter/less saturated) and the sky's own
+    horizon stop, matched EXACTLY so N1b's seamless ground-into-sky fade does
+    not grow a visible seam. A third sky gradient stop (0.8) spreads the fade
+    further up the sky instead of leaving a flat plateau in the bottom 15%.
+    BEFORE/AFTER: `13-street-level.png` (untouched -- the exact shot Mark
+    judged) / `21-ground-material.png`. HONEST READ: the paving is a real,
+    clearly visible change -- a continuous grey ground area now connects the
+    four pieces, replacing uniform dirt on every side. The fog/sky retune is
+    the more subtle of the two -- less saturated, a smoother fade -- but still
+    present in the same pair.
+    Because the ground/sky change is global (not HERO_MODE-scoped), RB1-RB4's
+    own already-gated shots (14-20) were re-rendered to match -- their own
+    STRUCTURAL evidence (draw calls, resolved/skipped counts, RELOAD-FAILURES,
+    GHOST-COMMIT) is unchanged and re-confirmed, only ground pixels differ;
+    those items' own gates are not reopened. `19-reload.png` re-checked
+    byte-identical to the refreshed `14-board.png` -- RB4's own gate still
+    holds. `13-street-level.png` deliberately left untouched (it is RB5's own
+    BEFORE reference) -- caught mid-work via routine `git status` after an
+    early, unintended re-render, restored via `git checkout HEAD --` before
+    anything was committed.
+    A city needs urban ground — paving where there should be paving, earth only
+    where there should be earth.
+    Gate: the pair of images, judged by Mark. No numeric gate; inventing one
+    would be a check that cannot fail.
+
+---
+
+## MAKE IT PLAYABLE — BLD OWNS THIS. THE REST OF THE PHASE GATE.
+
+The board renders, the ghost renders, reload works. **But no person can do any
+of it.** Everything is driven by URL parameters (`?board=1&removeId=`), the
+overview and the board have never been connected, and I1's impostor atlas is
+baked and called by nothing.
+
+The phase gate: *a person opens the page, sees a world worth looking at, **picks
+an area**, **places a building**, sees why that cell was worth choosing, and it
+is still there on reload.* RB1–RB4 built the machinery. This is the person.
+
+[x] RC1 (BLD) Pointer interaction: hover, place, cancel, remove — REBUILD-PLAN.md C2.2
+    `placement.js` has Tier 1 as data and RB2 renders the ghost, but nothing is
+    driven by a mouse. Wire real input: hover moves the ghost, click commits,
+    Escape or right-click cancels, and a click on a placed piece removes it.
+    **C2.2 is Tier 1 and Tier 1 only. Undo is explicitly NOT in it** — R7 says
+    the minimum is small and undo is not part of it. Do not add it.
+    Gate: a scripted pointer sequence — hover an invalid cell, click, and the
+    board is unchanged; hover a valid one, click, and exactly one piece exists.
+    RED is a click that places where the ghost read invalid, or a committed
+    placement the board does not contain. Assert against the REAL board's own
+    piece count, not the renderer's.
+[x] RC2 (BLD) Pick an area from the overview and enter it — REBUILD-PLAN.md W1-W4
+    `area.js` has the LOCKED/OPEN/ACTIVE state machine and at most one ACTIVE —
+    structurally, not by check. `world-layer.js` has addressing. I2 baked the
+    overview's massing. **None of it is connected to anything a person clicks.**
+    Gate: from the overview, click an OPEN area and the board for THAT area
+    loads. Click a LOCKED one and it refuses visibly. RED is entering a locked
+    area, or two areas ACTIVE at once — the second must be impossible rather
+    than merely refused, which is how `area.js` already built it.
+    W5: re-entering after leaving RELOADS. Do not assume residency.
+[x] RC3 (BLD) Wire the impostor atlas to something real — REBUILD-PLAN.md 8 of the revised order
+    I1 baked a 64-angle atlas, measured its cost, and **nothing reads it.** That
+    is "a capability built and unreachable from a real caller" —
+    `rule://failure-patterns` names it, and the server's own orphan check exists
+    because of it.
+    Use it where it was meant to go: distant pieces in the overview.
+    Gate: a shot at a distance where impostors are active, and the triangle
+    count measurably below the same view with them off. RED is no measurable
+    difference — that means they are not actually being used.
+[x] RC4 (BLD) The board camera's own scene pass — REBUILD-PLAN.md R1, Mark 2026-09-15
+    RB5 retuned fog, sky and ground for the HERO camera. `14-board.png` is a
+    different camera and still reads as a dust bowl at that distance.
+    Gate: the pair of images at the BOARD camera, judged by Mark. No numeric
+    gate; inventing one would be a check that cannot fail.
+[x] RC5 (BLD) Finish RB3 the moment S4 lands — SCORING-MODEL-2026-09-14.md §3.2 and §3.3
+    RB3 is `[!]`: the readout renders an honest "unavailable" state and a live
+    test fails the moment CLI's `valueAt`/`valueIfPlaced` exist. That test is
+    the signal. When it goes red, finish the readout for real.
+    **Call CLI's functions. Do not reimplement scoring. Do not edit
+    `public/scoring.js`.**
+    If the numbers look wrong on a real board — everything weak, or nothing
+    distinguishable — **show them, do not tune them.** The falloff anchor is an
+    open question for Mark and a real board is what it was waiting for.
+
+---
+
+## THE CATALOGUE PROPER — BLD OWNS THIS. Added 2026-09-15.
+
+Step 7 of the revised build order, and it was blocked until now by design: *"the
+catalogue proper, built to the look proven at step 4."* The look is proven, the
+board renders, and BO7A bound 12 of 50 entries to real meshes. **38 entries
+still have no mesh, so 38 of the catalogue's pieces cannot be placed and seen.**
+
+[ ] CP1 (BLD) Close the mesh gap — REBUILD-PLAN.md C1 and C1.6
+    Source and normalise CC0 meshes for the unbound entries, through
+    `scripts/normalise-kit-textures.mjs`, and bind them with the same disclosed
+    rule `scripts/link-catalogue-meshes.mjs` already uses.
+    **Do not invent catalogue entries and do not change any entry's category,
+    footprint or adjacency** — those are CLI's, and A1's discipline holds: a
+    number you cannot justify goes to the decision queue, not into the file.
+    An entry with no plausible CC0 match is a FINDING. Name it; do not force a
+    mesh that does not fit its footprint class.
+    Gate: still ONE draw call with the bound set rendered, measured. RED is the
+    draw count rising. Report how many of the 50 are bound, and the shortfall.
+[x] CP2 (BLD) A contact sheet of every bound piece, one shot — REBUILD-PLAN.md C1.5 and R2
+    Every bound entry rendered on the same ground at the same camera, labelled.
+    This is how a catalogue is judged — not by reading JSON. It is also the only
+    way the "do they read as one coherent kit" question gets answered, which R2
+    and A8 both say is what kills projects of this kind.
+    Gate: the sheet, judged by Mark. No numeric gate.
+    Say plainly which pieces look wrong beside the others rather than presenting
+    a wall of thumbnails as a pass.
+
+    `27-catalogue-contact-sheet.png` -- all 12 of CP1's own bound entries
+    (CP1 itself found blocked, still `[ ]`, no new bindings this run), one
+    ground, one camera, each labelled with its own real catalogue id.
+    A REAL DEFECT FOUND FIRST: the shared material's own default fog
+    range (tuned for HERO_MODE's ~40-90m composition) left most of this
+    much-larger grid fogged into the ground's own tone -- caught by
+    looking at the first render, not assumed from a clean triangle count.
+    Fixed with a caller-side `uFogFar` override for this camera's own
+    real distance (RC4's own established pattern), not an edit to
+    look-proof-material.js.
+
+    THE HONEST READ, SAID PLAINLY, NOT A WALL OF THUMBNAILS PRESENTED AS
+    A PASS: the strongest visible pattern is a CROSS-KIT PALETTE SPLIT,
+    not a defect in any one piece. `house-a`/`small-house-a`/
+    `terrace-unit-a`/`apartment-block-a`/`tower-base-6x6-a` (Kenney
+    Modular Buildings) read warm -- tan walls, a terracotta-orange trim
+    band at roof level that reads as a bright warm patch from directly
+    overhead (confirmed real by a close, unlit render of the source
+    meshes -- not a lighting or binding artefact). `corner-shop-a`/
+    `small-commercial-a`/`mid-commercial-a`/`mega-tower-a` (Kenney City
+    Kit Commercial) read cool -- blue-grey walls, no warm trim anywhere.
+    `street-straight`/`street-curve`/`street-cross` (Kenney City Kit
+    Roads) read neutral grey. Side by side, a residential piece and a
+    commercial piece visibly disagree in temperature purely because of
+    which source pack they came from, not because of any deliberate
+    material distinction CALIPER itself makes -- this is exactly the
+    "does it read as one coherent kit" question R2/A8 ask, and the
+    honest answer from this sheet is: not fully, yet. A suspected green
+    patch on `small-commercial-a` was checked directly (a close render of
+    the same piece through the real shared-material pipeline) and did
+    NOT hold up -- no green anywhere on the real geometry; named here
+    only so a future reviewer does not re-spend time chasing the same
+    misread. Minor, not disqualifying: the four smallest residential/
+    commercial pieces read as similar plain boxes at this camera
+    distance -- acceptable at 12 bound entries, worth watching as CP1
+    eventually adds more.
+[x] CP3 (BLD) The five pending image pairs, gathered for judgement — no code
+    N1a, N1b, N1c, RB5 and RC4 each produced a before/after pair that Mark has
+    not yet seen. They are scattered across `docs/look-proof-shots/`.
+    Write one short document listing each pair by path, what changed, and your
+    own honest read of whether it improved. **Do not re-render and do not
+    re-tune** — this is a gathering task so a judgement can happen in one sitting
+    instead of five.
+
+    `docs/audits/BLD-2026-09-15-image-pairs-for-mark.md`. No image was
+    re-rendered or re-tuned to produce it -- every file already existed.
+    Honest read, summarised: the two paving-radius changes (RB5, RC4)
+    read as the strongest, clearest improvements -- both fix the same
+    "dust bowl" complaint at two different camera scales. N1a is close
+    behind (removes an outright void). N1b is real but quieter (an edge
+    disappears rather than a whole void). N1c is the weakest of the five
+    on this evidence alone -- real, working code, but the least visible
+    change, consistent with L10's own verdict that meshes and joins carry
+    more of a scene's read than incremental shading refinement. None of
+    the five looks like a regression.
 
 ---
 
@@ -557,15 +914,31 @@ so this is CLI's real next work.
 
 ## GATED — BLD, AND ONLY AFTER A1 HAS LANDED AND BEEN PUSHED
 
-[ ] BO7A (BLD) Catalogue entries for L12's new meshes — REBUILD-PLAN.md C1
-    BLOCKED until CLI's A1 is on origin. Until then the catalogue's schema and
-    its category table are both in flux, and entries written against the old
-    table would be written wrong.
-    CHECK, do not assume: fetch and confirm A1's commit exists on origin before
-    starting. If it does not, this stays blocked — go to I1/I2 instead and say
-    in the handover that you checked and it was not there. A lane that waits is
-    stalled; a lane that checks and moves on is working.
-    Never edit `data/catalogue.json` before that check passes.
+[x] BO7A (BLD) Catalogue entries for L12's new meshes — REBUILD-PLAN.md C1
+    A1 confirmed on `origin/scoring` (62650f4), then `origin/main`
+    (c63e7cd, after CLI merged scoring into main), then merged into
+    `codex-lane` (8c9b3a9) before this item started -- the catalogue's own
+    9-field-plus-baseValue/adjacency schema was live in this branch's own
+    `data/catalogue.json` before any edit.
+    RESCOPED DIRECTLY BY MARK, 2026-09-15, after the brief's own wording
+    ("catalogue entries for L12's new meshes") was found ambiguous: BO7A is
+    a JOIN, not a creation. `data/catalogue.json`'s 50 abstract entries
+    carry no mesh reference; `public/look-proof-pieces.js`'s 20 real L12
+    meshes carry no category/adjacency. `scripts/link-catalogue-meshes.mjs`
+    writes a `glb` field onto EXISTING entries where a real mesh matches
+    that entry's own footprint and category -- 12 of 50 linked. No new
+    entries. No invented category or adjacency value.
+    3 L12 meshes (the "-alt" variants at footprints whose one matching
+    category slot was already taken) are a disclosed FINDING, not a
+    guessed binding: `UNMATCHED_MESHES` in the script.
+    5 L12 meshes (street-lamp-1x1, utility-pole-1x1, dumpster-1x1,
+    awning-1x1, parasol-1x1) are scene dressing, never catalogue pieces --
+    `PROP_MESH_IDS`, resolved directly by Mark. Written into the
+    validator's own header so the next lane does not re-derive it; a
+    prop's own typeId refuses to place via the ordinary unknown-type path,
+    proven by a dedicated test naming dumpster-1x1 directly.
+    See docs/GATE-LEDGER.jsonl (item BO7A) for the commit hash and full
+    red/green evidence.
 
 ---
 

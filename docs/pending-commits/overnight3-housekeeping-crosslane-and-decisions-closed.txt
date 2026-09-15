@@ -1,0 +1,25 @@
+Housekeeping: file COMPLETION-PLAN.md's last PART 2 tick as a cross-lane
+request (the file is CLI-lane-owned, on b1-land only), and close out
+caliper-bld decisions #1 and #2 in docs/DECISIONS-FOR-MARK.md, per Mark's
+own confirmation tonight that both are done
+
+What this is. PART 2's last line ("Decide the uncommitted package.json
+change and the 10 untracked pending-commit files") is done -- resolved in
+commit 19920dc (allowScripts removed) and by the deliberate decision to
+leave docs/pending-commits/*.txt untracked. Mark confirmed this tonight.
+docs/specs/COMPLETION-PLAN.md lives on b1-land only; this lane reads it
+read-only (git show b1-land:...) and does not edit across the branch, so
+the tick itself is filed as docs/CROSS-LANE-REQUESTS.md entry 3, for
+whoever next has b1-land write access.
+
+Also closes the loop on this lane's own decision queue:
+docs/DECISIONS-FOR-MARK.md's caliper-bld #1 and #2 were both marked
+resolved in code weeks ago (19920dc; the deliberate leave-as-is on #2) but
+never marked resolved IN THE DOCUMENT itself, so process_pending_decisions
+kept surfacing them as open every session. Added a dated RESOLVED note to
+each, in place, per this document's own practice of adding rather than
+rewriting.
+
+What is still open. Nothing from this commit -- both decisions close
+clean, the cross-lane tick request is filed and waits on the CLI lane's
+own write access to b1-land, same as entries 1 and 2 already do.

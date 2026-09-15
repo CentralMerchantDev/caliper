@@ -1,0 +1,120 @@
+F3: kitbash variety -- what reaches the world versus what the registry
+holds, measured precisely, both numbers side by side, and why for every
+gap
+
+Deliberately NOT run tonight: the full node test/run.mjs suite. This host
+had ~0.65 GB free earlier tonight with the CLI lane running its own suite
+concurrently -- exactly the condition that made the regression gate come
+back red inside the suite while passing clean in isolation
+(docs/audits/OVERNIGHT-BLD-2026-09-11.md, decision caliper #4). Verified
+instead against targeted files plus `npx tsc --noEmit`, both clean. Free
+memory recovered to ~4.9 GB partway through this session (checked, not
+assumed) but the instruction stands regardless of the reading.
+
+What was measured, and why every gap is what it is. The registry:
+public/kitbash-parts.js holds 62 named geometry parts;
+public/kitbash-recipe-map.js's DESIGN_RECIPE_MAP holds 40 named designs.
+Two DIFFERENT reachability numbers exist for this kit, and conflating them
+is exactly the defect this item asks to close:
+
+1. Reachable from the kit's OWN internal harness (assembleBuilding's
+   random assembly + all 40 named designs, exercised together) -- 57/62
+   parts (92%), 40/40 designs (100%, each assembles real non-empty
+   geometry). Already measured and gated since RUN2/RUN3
+   (test/kitbashNamedDesigns.test.ts's own "GATE: registry coverage" test,
+   unchanged tonight, reconfirmed passing). The 5/62 parts unreached even
+   here (all `connector` category) are WHY: genuinely, mechanically
+   unreachable given current content, not a bug -- a connector needs a
+   design with two structural volumes to join; exactly one shaft part has
+   a paired form (shaft-twin-atrium), and every design using it already
+   has exactly one connector. Checked mechanically by this suite's own
+   RUN3 test, which goes red the day a new twin-shaft design appears.
+
+2. Reachable from the real PRODUCT world (what a visitor's browser
+   actually loads, index.html/city.html -> city-render.js) -- 0/62 parts,
+   0/40 designs. `public/city-render.js` has zero references to any
+   kitbash export, confirmed by direct grep on THIS branch and on
+   `b1-land` (`git show b1-land:public/city-render.js`, read-only, no
+   checkout). WHY: never wired to product, anywhere -- this is NOT the F1
+   pattern (wired on the other branch, just not merged yet); it is unwired
+   on both branches, a whole disconnected subsystem, first named in
+   docs/audits/K6-BUILDINGS.md's own "disconnected capability" section and
+   never closed since. The real, rendered world is built entirely through
+   a separate, parallel system (public/buildings.js's `building()`
+   dispatcher).
+
+A third, previously-uncategorised bucket, found while classifying the
+gaps precisely rather than reporting one number: 4 of the kit's exports
+(createRng, createChamferedRectShape, createBevelledExtrusion,
+resolvePalette) classify as "unreachable" by the cross-file import graph,
+which sounds like dead code and is NOT -- checked directly, all four are
+called heavily WITHIN their own file (resolvePalette alone has 60+ call
+sites in kitbash-parts.js). They are over-exported utilities, genuinely
+load-bearing, just not imported from anywhere else. Exactly the "unreached
+can mean several different things" case this item's own brief warned
+about, using tonight's earlier deadExports finding (5 facade-textures.js
+exports that turned out to BE the F1 capability itself) as the precedent.
+
+What changed, and the gate that watches it.
+
+1. test/deadExports.allowlist.json: added the one missing entry
+   (kitbash-assembler.js:assembleNamedDesign -- demo-only via
+   kitbash-district.html, the same class as its sibling assembleBuilding,
+   already allowlisted but never extended when assembleNamedDesign was
+   added in RUN2/RUN3) that was causing test/deadExports.test.ts to fail
+   as of last night's full-suite run. Also upgraded the four internal-
+   helper entries above from unreviewed boilerplate to real, specific
+   reasons, now that they have been individually checked.
+
+2. test/kitbashNamedDesigns.test.ts: new test, "GATE: kitbash reachable
+   from the real PRODUCT world" -- reuses the SAME reachability machinery
+   test/deadExports.test.ts already uses (scripts/lib/module-graph.mjs's
+   classifyRepoReachability, a real import-graph walk from declared
+   PRODUCT/DEMO/TEST entry points), filtered to public/kitbash-*.js
+   exports, printing the full breakdown (product/demo-only/test-only/
+   unreachable counts and names) every run. Marked { todo }, matching
+   test/facadeVariants.test.ts's own F1 gate exactly.
+
+Blind subagent review before implementation, per this run's brief. A
+fresh general-purpose agent with no other context verified every claim in
+the plan independently (city-render.js's own zero kitbash references on
+both branches, kitbash-district.html's real calls, the missing allowlist
+entry, classifyRepoReachability's real signature) and found one real
+defect before any code was written: the planned assertion
+("assert none are product-reachable") is TRUE TODAY, so it would pass
+silently -- the opposite of visible. Fixed before implementing: the
+assertion now states the GOAL (at least one export is product-reachable),
+false today, correctly rendering as a visible ⚠ in the todo/failing recap
+rather than a silent pass -- the same shape as facadeVariants.test.ts's
+own gate, not just a superficial resemblance to it. Also caught two minor
+citation-precision issues (a bare path to a file that only exists on
+b1-land; an overstated "entire kit is demo/test-only" that glossed over
+the four internally-used-but-unreachable exports) -- both fixed in the
+allowlist text above.
+
+The gate, red first, for real. Before implementation:
+`node test/run.mjs deadExports.test.ts` failed exactly as claimed (7
+unreachable exports named, including assembleNamedDesign). After the
+allowlist fix: 6 remain (5 facade-textures.js, F1's own gap; 1
+nav-bindings.js, unrelated, out of scope), assembleNamedDesign no longer
+among them.
+
+Implemented, then green: `npx tsc --noEmit` clean.
+`node test/run.mjs kitbashAssembler.test.ts kitbashNamedDesigns.test.ts
+kitbashParts.test.ts kitbashRecipeMap.test.ts` -- 14 tests, 13 pass, 1
+honest todo (the new gate, correctly red for the stated reason).
+
+Watched red for real, then green, proving the gate is a live measurement
+and not a hardcoded value. Added a real import
+(`import { KITBASH_PARTS } from "./kitbash-parts.js";`) to
+public/city-render.js -- the gate immediately reported "1 / 10" reachable
+and the test flipped from todo-red to green. Restored and verified
+byte-identical (`md5sum`, matched: 29f051148bf8c9618a245b311c05e89e)
+before re-running -- both tests back to their original state.
+
+What this is not. This does not wire the kit into the real renderer --
+that would mean editing public/city-render.js, CLI-lane-owned, out of
+scope and against this run's own instruction. It measures the gap
+precisely, classifies every reason honestly, and gates so the two numbers
+(registry vs both real senses of "reachable") cannot silently drift back
+into being conflated.

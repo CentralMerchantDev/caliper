@@ -2,13 +2,14 @@
 // THE CATALOGUE VALIDATOR — docs/specs/REBUILD-PLAN.md C1, Phase 1 item 5;
 // rules 7-8 added for §S2 (docs/briefs/CLI-2026-09-14-scoring.md item 2.1);
 // rule 9 added for §S4 (unitQuality); rule 10 added for §U4 (B1's own
-// provenance fields on a player-authored entry).
+// provenance fields on a player-authored entry); rule 11 added for BO7A
+// (glb).
 //
 // Written before anything consumes data/catalogue.json, per the brief's own
 // instruction. A11's own evidence is why: "Unknown node types are caught
 // immediately — the LLM cannot invent a node name." This is what makes that
 // true here — a model (or a person) can add a row, and this is what tells
-// them, immediately and by name, when the row is wrong. Ten rules:
+// them, immediately and by name, when the row is wrong. Eleven rules:
 //
 //   1. every footprint is a whole number of modules
 //   2. every footprint in C1.1's set of eight, or a rotation of one
@@ -20,10 +21,29 @@
 //   8. adjacency is present, a plain object, and every value in it an integer (S2)
 //   9. unitQuality is present, a finite number, in (0, 1] (S4)
 //   10. provenance (author/verifiedBy/createdAt/sourceRef) is all-or-nothing (U4)
+//   11. glb, if present, is a non-empty string (BO7A)
 //
 // Returns a list of errors rather than throwing, so a caller (a test, a
 // future LLM generation loop per A11) can report every problem in one pass
 // instead of stopping at the first. An empty list is the only "valid".
+//
+// `glb` (BO7A, 2026-09-15) LINKS an entry to a real mesh in `public/look-
+// proof-pieces.js` (L12) -- `null` on most entries, since most of the 50
+// have no matching real mesh yet, and that is expected, not a defect.
+// scripts/link-catalogue-meshes.mjs is the one place this field is ever
+// written; hand-editing it here risks drifting from that script's own
+// disclosed matching rule.
+//
+// PROPS ARE NOT CATALOGUE PIECES, RESOLVED DIRECTLY BY MARK (2026-09-15,
+// scoping BO7A): a lamp, a dumpster, an awning are scene dressing. C1.3
+// covers roads, C1.4 covers buildings; neither covers a prop, and this
+// repo already keeps props in a separate system (`public/prop-manifest.js`,
+// `public/prop-placement.js`). A prop's own typeId (e.g. "dumpster-1x1",
+// an L12 mesh id) is deliberately absent from this catalogue -- attempting
+// to PLACE one as a piece refuses via the ordinary "unknown-type" path
+// (area-board.js's evaluatePlacement), the same as any other id this
+// catalogue has never heard of. See scripts/link-catalogue-meshes.mjs's
+// own PROP_MESH_IDS for the disclosed list of which L12 meshes this covers.
 //
 // WHAT `adjacency`'S KEYS MEAN, RESOLVED HERE BECAUSE S2 DOES NOT SAY —
 // keyed by the CATEGORY OF THE NEIGHBOURING CELL a bonus applies to: for a
@@ -195,6 +215,15 @@ export function validateEntry(entry) {
     if (present.length > 0 && present.length < provenance.length) {
       const missing = provenance.filter((k) => !present.includes(k));
       push("provenance-all-or-nothing", `has ${present.join("/")} but is missing ${missing.join("/")} -- provenance is all four fields or none, never some`);
+    }
+  }
+
+  // Rule 11 — BO7A: glb, if present, is a non-empty string. Most entries
+  // have no mesh yet (glb: null), which is fine -- this rule only catches a
+  // present-but-malformed value (an empty string, a number, an object).
+  if (entry && "glb" in entry && entry.glb !== null) {
+    if (typeof entry.glb !== "string" || entry.glb.length === 0) {
+      push("glb-is-string-or-null", `glb is ${JSON.stringify(entry.glb)}, not a non-empty string or null`);
     }
   }
 

@@ -1,0 +1,100 @@
+F2 (K6 checklist, real remaining gap the prior "clean" survey missed):
+bldWarehouse's roofStyle declared three values but only had two real
+shapes -- "barrel" and "curved" both fell through the identical
+unconditional flat-box branch
+
+What was wrong. The prior session's F2b survey (commit c3bd9de) marked
+bldWarehouse "clean" on the narrow test "is every params field genuinely
+consulted" -- true, roofStyle IS read in an if/else. What that check did
+not ask: does every declared VALUE of a consulted field produce distinct
+geometry? It does not. `roofStyle = r3 < 0.4 ? "sawtooth" : r3 < 0.7 ?
+"barrel" : "curved"`, but the else-branch built one identical flat roof
+box regardless of which of "barrel"/"curved" was rolled -- confirmed by
+direct reading of public/buildings.js's real bldWarehouse (not the dead
+kit-style code), same file this whole checklist has already been working
+against. This is the same defect CLASS the checklist's item 1 correction
+named (a field computed and reported in `params` but not fully honoured by
+the geometry), just a milder variant: consulted, but two of three labels
+collapse to one output. Found by re-reading, not assumed from the earlier
+"clean" verdict.
+
+What changed. The else-branch now builds a real, per-building vault via a
+partial CylinderGeometry -- the same idiom bldMidrise's "curved"
+cornerTreatment already uses for a quarter-round corner (facadetextures.js
+precedent, line ~1883), applied horizontally (rotateX) instead of
+vertically. "barrel" (half-angle 0.55 rad) is a deeper arc than "curved"
+(0.28 rad); both radius and rise are derived from the building's own real
+width (bW/2 = R sin(halfAngle)), so the shape is correctly proportioned at
+every cellW/cellD combination, not a fixed constant. totalH and LOD1's
+roof-box height now track the style-dependent rise (`vaultRise`) instead
+of the old fixed `roofH`, so the declared height stays an honest upper
+bound and roof-mounted vents no longer sit embedded inside the taller
+vault (checked directly: vent height previously used the fixed roofH,
+which the vault's real apex height already exceeds).
+
+A real geometry bug caught by the tests themselves, not by inspection: the
+first version used `openEnded: false` (capped ends), which produced a
+`geometry dips below ground (-23.23)` failure -- a closed partial-cylinder
+cap is a triangle fan to the FULL circle's centre (radius 0), which for a
+shallow arc built from a large radius sits far below the visible arc
+itself, an artifact invisible for bldMidrise's small fixed-radius (1.4 m)
+corner but a real defect at this vault's much larger, per-building radius.
+Fixed to `openEnded: true`; the footprint-bounds test caught it on the
+first run, before any manual visual check.
+
+The gate, red first. Added a `positionFingerprint`-based test (matching
+this file's own established convention for shapes with identical triangle
+counts, e.g. bldTownhouse's bayStyle "full" vs "cantilever") --
+"barrel"/"curved" share the same CylinderGeometry segment counts and only
+differ in radius/angle, so a triangle-count assertion could not have
+caught this defect. Also added four footprint-bounds cases (barrel/curved
+at min and max cellW/cellD) to the existing "new shapes stay strictly
+inside the declared footprint" test.
+
+  node test/run.mjs buildingFeatureFlags.test.ts -- new fingerprint test
+  failed before implementation: "bld-warehouse roofStyle sawtooth/barrel/
+  curved produced only 2 distinct geometry fingerprint(s)" (2 !== 3).
+
+Implemented, then green: buildingFeatureFlags.test.ts (19/19, including
+the new fingerprint and four bounds cases), buildingExplicitSize.test.ts,
+buildingLODAndColors.test.ts, layoutGeometry.test.ts, trimAtlasPatch.test.ts
+-- 35/35 total, including AS1-AS4 and K7.1. `npx tsc --noEmit` clean.
+`node test/run.mjs regressionGate.test.ts` -- A5.1/A5.2/A5.3 green
+unchanged (366/857/664 calls, culling 36.93%/60.31%/44.33%, all under the
+90% floor), confirming warehouse's 0.06% world share does not move any
+standing gate.
+
+Watched red for real, in the finished code: VAULT_HALF_ANGLE.curved was
+collapsed onto VAULT_HALF_ANGLE.barrel (0.55/0.55 instead of 0.55/0.28),
+and exactly the new fingerprint test failed -- "produced only 2 distinct
+geometry fingerprint(s)" -- 18/19 pass, no other test affected. Restored
+and verified byte-identical (`md5sum`, matched: a209cd95c673064dd60aa42-
+dbdd67d7c) before re-running green (34/34 across the four core files).
+
+Measured, not assumed: real LOD0 triangle count for the default test seed,
+392 (previous declared budget was 384, calibrated for the old flat box;
+recalibrated to 392, the real measured value, matching this file's own
+established practice of setting the declared ceiling from the artefact).
+
+What this checklist item is not, and a real pre-existing gap named rather
+than fixed. AS3's own triangle-budget assertion (buildingLODAndColors.
+test.ts) only exercises ONE fixed seed per typology, not the full option
+space -- checking directly, bldWarehouse's SAWTOOTH branch already
+produces up to 756 triangles at max cellW/cellD (756 > both the old 384
+and the new 392 declared ceiling), a pre-existing gap unrelated to this
+fix (the sawtooth branch is untouched) and already named in RUN2's commit
+as "declared budgets were never exhaustively verified against the full
+options space" -- not closed here, named again because this run's
+measurement pass surfaced the exact number.
+
+Survey record. With this fix, every one of the twelve dynamic typologies
+in docs/audits/K6-BUILDINGS.md's own measurements table has now been
+individually checked for BOTH senses of "computed but not honoured" --
+field never read at all (terrace/townhouse/villa/midrise/business-park/
+apartment-walkup/workshop, all fixed across RUN2-RUN5), and field read but
+with collapsing values (warehouse, this commit; office/shop/tower
+confirmed to have no such collapse by direct reading this session). F1
+(the shared four-texture atlas) remains the one open item in K6's own
+priority order, and remains blocked cross-branch for the reason recorded
+this session in docs/CROSS-LANE-REQUESTS.md -- not something either lane
+can close alone.

@@ -1,0 +1,101 @@
+F2 (K6 checklist, highest-value remaining leaf item): bldHighStreetTerrace
+had zero structural options of any kind -- confirmed by reading the whole
+function before changing it: no `params` field in its returned object,
+`r3` rolled and discarded, one fixed mansard-like roof (lower/upper box
+stack) plus two dormers always present regardless of seed. Named this run
+while finishing K6-BUILDINGS.md's own RUN2 survey ("does the computed-but-
+ungated defect recur in the remaining 8 typologies?"), which had never
+actually reached this typology, tower, warehouse, or apartment-walkup.
+Unlike this typology's siblings (tower, warehouse -- both confirmed clean
+this run) this wasn't a wired-but-ignored flag, it was a genuine missing
+capability -- the highest-value gap still open in F2, at 1.86% of the
+world's placements (318 of 17,108), 23x business-park's share and the
+largest share of anything below the four dominant typologies.
+
+What changed. `roofStyle` (options-overridable, `r3 < 0.6 ? "mansard" :
+"parapet"`) now branches real geometry: "mansard" reproduces today's exact
+lower/upper roof and both dormers, byte-for-byte, so the majority case is
+unchanged; "parapet" is new, reusing the identical flat-parapet+coping box
+idiom bldVilla/bldApartmentWalkup already use (not invented geometry) and
+omits the dormers, matching bldVilla's/bldTerrace's own existing
+convention that dormers are a pitched/mansard feature and would poke
+through a flat roof. `roofH` is now `roofStyle`-dependent (1.2 for
+parapet vs 3.0 for mansard, `totalH` recomputed from it) -- every other
+roofStyle-bearing sibling in this file already does this and the first
+version of this fix did not, until a blind plan review caught the gap
+before any code was written. `params: { roofStyle }` was added to the
+return object, which this function previously omitted entirely.
+
+Stated honestly: this changes the shape of a real fraction of the world's
+*existing* 318 placements, not just new ones, since `r3` was already
+rolled per-seed and previously discarded -- roughly 40% of them move from
+the mansard+dormers shape to the new parapet shape. This is the intended
+effect (the same rollout shape as bldWorkshop's roofStyle fix, RUN3), not
+a side effect, and is recorded here per the blind review's instruction not
+to understate it as low-disturbance the way the session's two boolean-flag
+fixes (hasSolarArray, hasGarden -- both purely additive) were.
+
+Blind review before implementation, per this run's brief. A fresh
+general-purpose subagent with no other context reviewed the plan against
+the real code. It found one defect that would have made the test fail
+immediately rather than only under mutation: the planned CASES entry
+ordered `values: ["mansard", "parapet"]`, but parapet (2 roof boxes, no
+dormers) has FEWER triangles than mansard (2 roof boxes + 4 dormer boxes)
+-- the harness's own `assert.ok(on > off)` needs fewer-tris-first, so the
+order had to be `["parapet", "mansard"]`. It also found the roofH/totalH
+gap above, the missing `params` field, and that
+test/buildingExplicitSize.test.ts's `NO_CELL_OPTION_TYPOLOGIES` entry for
+this typology carried a comment ("one option set is genuinely all there is
+to cover") that this change makes false -- all four folded in before
+implementation, not left as follow-ups.
+
+The gate, red first. test/buildingFeatureFlags.test.ts's CASES array
+extended with `{ typology: "bld-highstreet-terrace", flag: "roofStyle",
+values: ["parapet", "mansard"] }`; the "new shapes... stay strictly inside
+declared footprint" test extended with `["bld-highstreet-terrace",
+{ roofStyle: "parapet" }]`; test/buildingExplicitSize.test.ts's entry for
+this typology extended from a single `{}` optionSet to `[{}, { roofStyle:
+"parapet" }]`, with the now-stale comment corrected in place rather than
+left to mislead the next reader.
+
+  node test/run.mjs buildingFeatureFlags.test.ts -- new test failed before
+  implementation: "bld-highstreet-terrace: roofStyle="parapet" and
+  roofStyle="mansard" produced identical triangle counts".
+
+Implemented, then green: buildingFeatureFlags.test.ts,
+buildingExplicitSize.test.ts, buildingLODAndColors.test.ts,
+layoutGeometry.test.ts -- 33/33 (including AS1-AS4). `npx tsc --noEmit`
+clean.
+
+Watched red for real, in the finished code: the `if (roofStyle ===
+"parapet")` gate was replaced with `if (false)`, and exactly the new
+roofStyle test failed -- "roofStyle=\"parapet\" and roofStyle=\"mansard\"
+produced identical triangle counts (576)" -- no other test affected.
+Restored and verified byte-identical (`md5sum`, matched:
+23062f376d787a71d747d53277814eb6) before re-running green (28/28 across
+the three targeted files).
+
+Measured, not assumed: real LOD0 triangle counts from the artefact,
+mansard -> 576, parapet -> 528 (declared budget 594; both inside AS3's
+70%-100% band). Real heights: mansard totalH=20.8, parapet totalH=19 (the
+parapet's shortened roofH reduces total height, matching every sibling
+parapet form). Across 20 sample seeds with no options: 14 mansard, 6
+parapet -- consistent with the ~60/40 split the `r3 < 0.6` threshold
+implies at this sample size.
+
+Survey record, closing the K6-BUILDINGS.md RUN2 item properly:
+`bldTower`'s `params: { cellW, cellD, storeys, profile }` -- `profile`'s
+five values all branch genuinely different geometry, clean, not touched.
+`bldWarehouse`'s `params: { cellW, cellD, roofStyle }` -- both real; an
+unrelated `r4` is rolled and discarded but never reaches `params`, so it
+is dead code rather than this defect, and was left alone. Both confirmed
+by direct reading this run, not assumed from the typology's placement
+share.
+
+This is the third fix in this session addressing F2 in K6's own priority
+order (after bldBusinessParkBlock's hasSolarArray and
+bldApartmentWalkup's hasGarden, both this run). F1, K7.1's visual
+re-shoot, and the browser-dependent interface items remain blocked for
+the reasons already recorded in
+docs/audits/OVERNIGHT-BLD-2026-09-10.md (cross-branch merge; memory read
+0.94-1.19 GB free this run).

@@ -18,6 +18,9 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { validateCatalogue, validateEntry, CATALOGUE_FOOTPRINTS, ROAD_CLASS_HIERARCHY } from "../public/catalogue-validator.js";
 import { AMENITY_CIVIC_TYPE_IDS, unitQualityFor } from "../scripts/migrate-catalogue-s2-fields.mjs";
+import { MESH_BINDINGS, UNMATCHED_MESHES, PROP_MESH_IDS } from "../scripts/link-catalogue-meshes.mjs";
+import { PIECES } from "../public/look-proof-pieces.js";
+import { createAreaBoard } from "../public/area-board.js";
 
 function repoRoot(): string {
   let dir = dirname(fileURLToPath(import.meta.url));
@@ -139,6 +142,70 @@ test("every civic entry ON the amenity list DOES carry a positive residential bo
     assert.equal(entry.category, "civic", `${typeId} is on the civic amenity list but its own category is "${entry.category}"`);
     assert.ok(typeof entry.adjacency.residential === "number" && entry.adjacency.residential > 0, `${typeId}: expected a positive adjacency.residential, got ${JSON.stringify(entry.adjacency.residential)}`);
   }
+});
+
+// ---------------------------------------------------------------- BO7A: the join
+//
+// "BO7A is a JOIN, not a creation" (Mark, directly, 2026-09-15, scoping the
+// item after its own brief text was found ambiguous). data/catalogue.json's
+// 50 abstract entries and public/look-proof-pieces.js's 20 real L12 meshes
+// are linked by scripts/link-catalogue-meshes.mjs, not by new entries and
+// not by invented category/adjacency values. These tests check the REAL
+// catalogue agrees with that script's own disclosed tables -- a mesh bound
+// to the wrong entry, or a binding silently dropped, would be exactly the
+// "ticked with none of what it claimed" drift this project's gate ledger
+// exists to catch.
+
+test("GATE (BO7A): the real catalogue's own glb fields exactly match link-catalogue-meshes.mjs's disclosed MESH_BINDINGS table -- no drift, nothing silently dropped or added", () => {
+  const catalogue = JSON.parse(readFileSync(join(ROOT, "data", "catalogue.json"), "utf8"));
+  const glbByMeshId = new Map(PIECES.map((p: any) => [p.id, p.glb]));
+  for (const [meshId, catalogueId] of Object.entries(MESH_BINDINGS)) {
+    const entry = catalogue.find((e: any) => e.id === catalogueId);
+    assert.ok(entry, `MESH_BINDINGS names catalogue id "${catalogueId}" (for mesh "${meshId}"), which does not exist in the real catalogue`);
+    assert.equal(entry.glb, glbByMeshId.get(meshId), `${catalogueId}.glb does not match the real path for mesh "${meshId}"`);
+  }
+  const boundIds = new Set(Object.values(MESH_BINDINGS));
+  for (const entry of catalogue) {
+    if (!boundIds.has(entry.id)) {
+      assert.equal(entry.glb, null, `${entry.id}.glb is set but is not named in MESH_BINDINGS -- either the table is stale or this was hand-edited outside the script`);
+    }
+  }
+});
+
+test("GATE (BO7A): every real L12 mesh is accounted for exactly once -- bound, a disclosed finding, or a disclosed prop, never silently unclassified", () => {
+  const bound = new Set(Object.keys(MESH_BINDINGS));
+  const unmatched = new Set(UNMATCHED_MESHES);
+  const props = new Set(PROP_MESH_IDS);
+  for (const piece of PIECES as any[]) {
+    const memberships = [bound.has(piece.id), unmatched.has(piece.id), props.has(piece.id)].filter(Boolean).length;
+    assert.equal(memberships, 1, `"${piece.id}" is in ${memberships} of {MESH_BINDINGS, UNMATCHED_MESHES, PROP_MESH_IDS} -- must be in exactly one`);
+  }
+  assert.equal(bound.size + unmatched.size + props.size, (PIECES as any[]).length, "the three tables' combined size does not match PIECES's own length -- something is double-counted or missing");
+});
+
+test("GATE (BO7A), named directly per Mark's own scoping: a prop's own typeId (dumpster-1x1, an L12 mesh id) cannot be placed as a catalogue piece -- refused via the ordinary unknown-type path, not a special case", () => {
+  const catalogue = JSON.parse(readFileSync(join(ROOT, "data", "catalogue.json"), "utf8"));
+  const catalogueById = Object.fromEntries(catalogue.map((e: any) => [e.id, e]));
+  const board = createAreaBoard({ width: 8, height: 8, catalogue: catalogueById });
+  for (const propId of PROP_MESH_IDS) {
+    assert.ok(!(propId in catalogueById), `"${propId}" must not be a real catalogue entry -- props are deliberately excluded`);
+    const verdict = board.evaluatePlacement(propId, { x: 0, y: 0 }, 0);
+    assert.equal(verdict.ok, false, `placing prop "${propId}" as a piece must be refused`);
+    assert.equal(verdict.reason, "unknown-type", `"${propId}" must refuse for reason "unknown-type", got "${verdict.reason}"`);
+  }
+});
+
+test("BO7A: scripts/link-catalogue-meshes.mjs is idempotent -- running it again against the real, already-linked catalogue produces byte-identical output", () => {
+  const before = readFileSync(join(ROOT, "data", "catalogue.json"), "utf8");
+  const catalogue = JSON.parse(before);
+  const glbByMeshId = new Map(PIECES.map((p: any) => [p.id, p.glb]));
+  const glbByCatalogueId = new Map<string, string>();
+  for (const [meshId, catalogueId] of Object.entries(MESH_BINDINGS)) {
+    glbByCatalogueId.set(catalogueId, glbByMeshId.get(meshId) as string);
+  }
+  const relinked = catalogue.map((entry: any) => ({ ...entry, glb: glbByCatalogueId.get(entry.id) || null }));
+  const after = JSON.stringify(relinked, null, 2) + "\n";
+  assert.equal(after, before, "re-running the same linking logic against the real catalogue produced a different result -- the file on disk has drifted from the script");
 });
 
 // ---------------------------------------------------------------- rule 1
@@ -403,4 +470,32 @@ test("RULE 10: three of four provenance fields present is caught, naming the one
   assert.ok(err, JSON.stringify(errors));
   assert.match(err!.message, /sourceRef/);
   assert.doesNotMatch(err!.message, /author\/verifiedBy\/createdAt\/sourceRef/);
+});
+
+// ------------------------------------------------------------ rule 11 (BO7A)
+test("RULE 11 (glb): absent entirely is NOT flagged -- most of the 50 entries have no matching L12 mesh yet, and that is expected", () => {
+  const entry = goodBuilding();
+  delete (entry as any).glb;
+  const errors = validateEntry(entry);
+  assert.ok(!errors.some((e) => e.rule === "glb-is-string-or-null"), JSON.stringify(errors));
+});
+
+test("RULE 11: null is NOT flagged -- the explicit 'no mesh yet' value scripts/link-catalogue-meshes.mjs writes", () => {
+  const errors = validateEntry(goodBuilding({ glb: null }));
+  assert.ok(!errors.some((e) => e.rule === "glb-is-string-or-null"), JSON.stringify(errors));
+});
+
+test("RULE 11: an empty string is caught", () => {
+  const errors = validateEntry(goodBuilding({ glb: "" }));
+  assert.ok(errors.some((e) => e.rule === "glb-is-string-or-null"), JSON.stringify(errors));
+});
+
+test("RULE 11: a non-string, non-null value is caught", () => {
+  const errors = validateEntry(goodBuilding({ glb: 42 }));
+  assert.ok(errors.some((e) => e.rule === "glb-is-string-or-null"), JSON.stringify(errors));
+});
+
+test("RULE 11: a real path string is NOT flagged", () => {
+  const errors = validateEntry(goodBuilding({ glb: "vendor/kits/kenney-modular-buildings/building-sample-house-b.glb" }));
+  assert.ok(!errors.some((e) => e.rule === "glb-is-string-or-null"), JSON.stringify(errors));
 });

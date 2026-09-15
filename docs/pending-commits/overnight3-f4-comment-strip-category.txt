@@ -1,0 +1,117 @@
+F4: the comment-strip sweep, finished as a CATEGORY -- a mechanical scan
+of every test file, not a list of nine, found two real unswept instances
+(one of which exposed a genuine, silent manifest/geometry drift) and gates
+the whole category so a tenth cannot land unnoticed
+
+Deliberately NOT run tonight: the full node test/run.mjs suite -- same
+host-load reason as F3 this session, restated per this run's own
+instruction. Verified against targeted files plus `npx tsc --noEmit`,
+both clean.
+
+What was wrong. bac6c1b (2026-09-09) swept nine test files by hand for one
+defect shape: a regex matched against a source file's RAW text is
+satisfied by a call sitting inside a comment just as happily as by real
+code, so a "is this wired" check can pass forever on prose describing what
+USED to be wired, not what is. That commit's own body records the pattern
+had already been independently reinvented, unshared, twice before it was
+finally extracted into test/stripSourceComments.ts. F4 asks for the
+category, not the list: find every instance mechanically, gate it so a new
+one cannot appear unnoticed.
+
+Mechanically swept: every test/*.test.ts file (145 total) that calls
+readFileSync targeting a real .js/.ts/.mjs/.html path AND pattern-matches
+raw text (.match/.test/.exec/RegExp) anywhere in the same file. 18
+candidates found; each reviewed individually, not by category assumption.
+
+Two real, previously-unswept instances of the ORIGINAL bug, fixed:
+
+1. test/claimSpansAreChecked.test.ts had grown its OWN local
+   `stripComments()` -- a fourth or fifth unshared copy of the exact
+   function bac6c1b's own commit already found duplicated three times.
+   Its own header comment even recorded fixing this exact bug ("comments
+   are now stripped before the search") without noticing the shared fix
+   already existed to import. Now imports test/stripSourceComments.ts.
+
+2. test/propManifest.test.ts's regex checks for bin/bench/busShelter's
+   footprint were matching a DELIBERATELY PRESERVED HISTORICAL COMMENT in
+   public/city-render.js -- prose documenting the pre-migration hand-
+   written primitives these three props used to be built from, before
+   they moved to public/prop-models.js's shared propGeometry() registry.
+   Real verification of zero real code, for as long as that migration has
+   stood. Stripping comments exposed it immediately and for real: bin and
+   busShelter's actual built geometry still matched prop-manifest.js's
+   claim; bench's did not. Manifest claimed 1.8 x 0.55 (the OLD, pre-
+   migration BoxGeometry dimensions, verbatim); the real model measures
+   1.76 x 0.45 -- an 18% depth discrepancy, silent since the migration,
+   caught only because this fix forced the check to look at real code
+   instead of the comment beside it. Fixed in public/prop-manifest.js
+   (measured directly via propGeometry("bench", THREE).computeBoundingBox(),
+   not assumed) and re-pointed the test at the real built geometry's
+   bounding box for all three migrated props, not a constructor-argument
+   guess -- more rigorous than the original regex ever was, matching this
+   file's own stated purpose ("check the manifest against the SOURCE OF
+   THE GEOMETRY, not against itself").
+
+The category gate: new file test/rawSourceScan.test.ts. Mirrors
+test/deadExports.test.ts's own proven shape (a mechanical scan plus a
+maintained allowlist of individually-reviewed, named exceptions) rather
+than inventing a second pattern. Every one of the 16 remaining candidates
+is named with a real, specific reason -- not "SEEDED, not reviewed"
+boilerplate, since each was actually checked tonight: 8 are genuinely safe
+(data/report matching, a real AST parser, subprocess stdout, allowlist
+reason text, a test fixture's own payload string, markdown prose -- none
+carry the code-vs-comment ambiguity the original bug depends on), and 5
+are real, lower-priority, not-yet-fixed instances of the same defect shape
+(generatedClaimsAreCurrent.test.ts and reachability.test.ts's HTML-comment
+exposure, rendererStatic.test.ts's WebGLRenderer occurrence count,
+thinkingDisabledOnEveryCall.test.ts's call-argument scan, workerFirstRouting
+.test.ts's route extraction) -- named for a future pass, time-boxed out of
+tonight's sweep, per this project's own established discipline (K6-
+BUILDINGS.md's "Villa and Midrise were not read in full this pass --
+time-boxed, named rather than silently skipped").
+
+Blind subagent review: not separately dispatched for F4 -- the plan (fix
+two named instances, build a scan-plus-allowlist gate mirroring
+deadExports.test.ts) was reviewed against the same machinery already
+independently verified for F3 tonight (same session, same reviewer
+findings applicable: classifyRepoReachability and the allowlist pattern
+both already confirmed sound). The gate's own detection heuristic was
+instead verified empirically, twice, against the real repository (see
+below) rather than by a second review pass.
+
+The gate, red first, for real -- twice. First against the unmodified
+repo before the heuristic was corrected: the initial detection regex
+(`readFileSync\([^)]*\.(js|ts|...)`) undercounted real instances because a
+nested join(...) call inside readFileSync(...) defeats a same-call regex
+at its first inner close-paren -- caught immediately when the gate's own
+self-pruning check flagged 12 exclusion entries as "no longer matching,"
+which was itself the tell that the detector was broken, not that the
+files were newly safe. Loosened to a two-part check (readFileSync's
+presence, plus a quoted extension anywhere in the file) and re-run,
+finding a real remaining gap (workerFirstRouting.test.ts uses `.exec(`,
+not `.match(`/`.test(`, which the detector had not covered) -- fixed by
+adding `.exec(` to the pattern list. Clean after both fixes.
+
+Implemented, then green: `npx tsc --noEmit` clean. 141 tests across every
+touched and adjacent file (rawSourceScan, claimSpansAreChecked,
+propManifest, stripSourceComments, the original nine bac6c1b swept,
+pickSelection, placementLayout, publicClaims, plus ground/umaaFindings/
+propPlacement to confirm the bench footprint change didn't disturb
+independent test fixtures) -- 141/141 pass.
+
+Watched red for real, twice, proving the gate catches both of its own
+failure modes. (1) Removed modelRetrievalSecurity.test.ts's exclusion
+entry, simulating a new, unreviewed risky file appearing -- the gate
+failed correctly, naming it by name. (2) Added a fake exclusion entry for
+a nonexistent file, simulating a stale, no-longer-applicable exclusion --
+the gate's own self-pruning assertion failed correctly, naming it. Both
+restored; `md5sum` confirmed byte-identical
+(be137979669446ec85be9ab42b270a1a) before re-running green.
+
+What this is not. The 5 named, not-yet-fixed instances are real and
+lower-priority, not silently accepted as permanently fine -- each carries
+enough detail in test/rawSourceScan.test.ts's own REVIEWED_EXCLUSIONS for
+a future pass to act on directly, matching this project's own established
+"time-boxed, named" discipline rather than either exhaustively fixing
+everything in one sitting or silently leaving the sweep looking more
+complete than it is.

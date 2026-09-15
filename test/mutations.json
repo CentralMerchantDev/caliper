@@ -21,6 +21,51 @@
   ],
   "mutations": [
     {
+      "id": "dead-export-gate-catches-a-new-uncalled-export",
+      "guards": "every export in public/ and src/ has a real (non-test) caller or a written allowlist reason -- a NEW export added with neither must fail the gate",
+      "note": "The mutation targets a small fixture file (public/_deadExportMutationFixture.js) built only for this purpose, not a shared production file, so this entry cannot collide with another lane's concurrent work in city-render.js/terrain.js/etc. The fixture starts with zero exports; the mutation adds one, unwired and unlisted.",
+      "file": "public/_deadExportMutationFixture.js",
+      "find": "// from this file. docs/BUILD-LOOP.md Step 6.",
+      "replace": "// from this file. docs/BUILD-LOOP.md Step 6.\n\nexport function __deadExportMutationProbe__() { return 1; }",
+      "expect": "every export in public/ and src/ is product-reachable"
+    },
+    {
+      "id": "module-map-generator-marks-non-product-exports",
+      "guards": "renderModuleMap (scripts/gen-module-map.mjs) marks every non-product export with its DEMO-ONLY/TEST-ONLY/UNREACHABLE state in the generated document, not just in memory",
+      "note": "Targets the generator script itself, not a shared production file. Updated when the generator was rewritten for reachability (Mark's review, same day as I2/I3): the old single **UNCALLED** marker no longer exists, replaced by STATE_LABEL[entry.state]; this mutation removes that lookup from the emitted line, leaving the product branch (which never uses STATE_LABEL) untouched on purpose, so the smoke test's assertion is proven to exercise the non-product path specifically.",
+      "file": "scripts/gen-module-map.mjs",
+      "find": "          `- \\`${name}\\` -- ${STATE_LABEL[entry.state]}${via ? ` (via \\`${via}\\`)` : \"\"}` +",
+      "replace": "          `- \\`${name}\\`${via ? ` (via \\`${via}\\`)` : \"\"}` +",
+      "expect": "product/demo-only/test-only/unreachable are all distinguishable in the text"
+    },
+    {
+      "id": "demo-caller-is-not-product",
+      "guards": "classifyReachability must classify an export whose ONLY caller is reachable from a demo page as demo-only, never product -- the exact roadkit.js junction/roundabout distinction this whole reachability upgrade exists for (Mark's correction: import counting and reachability can disagree)",
+      "note": "Targets classifyReachability's own demo-crediting branch in scripts/lib/module-graph.mjs (this task's own file). Changing the assigned state string from demo-only to product is the precise bug that made the FIRST version of this gate report roadkit.js's junction/roundabout as confirming they were fully uncalled, when they were actually reachable -- just only from a demo page.",
+      "file": "scripts/lib/module-graph.mjs",
+      "find": "          if (demo.has(caller)) { state = \"demo-only\"; via = caller; break; }",
+      "replace": "          if (demo.has(caller)) { state = \"product\"; via = caller; break; }",
+      "expect": "called only from a demo page reachable from nothing else is demo-only, not product"
+    },
+    {
+      "id": "namespace-member-access-credits-the-target-export",
+      "guards": "buildReverseMap credits `x.js`'s export when it is reached as `ALIAS.member(...)` after `import * as ALIAS from \"./x.js\"`, not only through a named import -- found by a blind audit: public/roadkit-street-demo.js's real ROADKIT.straight(...)/ROADKIT.curve(...)/etc calls, without this, made 16 genuinely-called roadkit.js exports read as fully dead",
+      "note": "Removes the `alias` field the namespace clause capture adds, targeting scripts/lib/module-graph.mjs (this task's own new file, not a shared production one another lane might be mid-edit on). Without `alias`, the member-access regex built from it becomes `/\\bundefined\\.(...)/`, which matches nothing real -- a structural break, not a disabled branch (per docs/AUDIT-PROTOCOL.md's own lesson this session: a commented-out or if(false)-wrapped mutation leaves source text intact and can survive wrongly).",
+      "file": "scripts/lib/module-graph.mjs",
+      "find": "    const nsMatch = trimmed.match(/^\\*\\s*as\\s+([A-Za-z_$][\\w$]*)$/);\n    if (nsMatch) {",
+      "replace": "    const nsMatch = trimmed.match(/^\\*\\s*as\\s+([A-Za-z_$][\\w$]*)$/);\n    if (nsMatch) { nsMatch[1] = undefined;",
+      "expect": "credits x.js's `member` export -- the roadkit-street-demo.js shape"
+    },
+    {
+      "id": "named-reexport-credits-the-source-file",
+      "guards": "buildReverseMap credits the file a `export { X } from \"./x.js\"` statement names as X's real source with a caller -- found by a blind audit: src/index.ts's real re-export of SpendCounterDO (wrangler.jsonc's bound Durable Object class_name), without this, made src/spendCounterDOClass.ts -- the file that actually defines CALIPER's spend cap -- read as fully dead",
+      "note": "Targets findReExportClauses' own regex in scripts/lib/module-graph.mjs (this task's own new file). Requiring an impossible literal prefix is a real structural break (the function always returns []), not a disabled branch.",
+      "file": "scripts/lib/module-graph.mjs",
+      "find": "const re = /^export\\s*\\{([^}]*)\\}\\s*from\\s+[\"']([^\"']+)[\"']/gms;",
+      "replace": "const re = /^export_NEVER_MATCHES\\s*\\{([^}]*)\\}\\s*from\\s+[\"']([^\"']+)[\"']/gms;",
+      "expect": "credits x.js's X with a real caller -- the src/index.ts/SpendCounterDO shape"
+    },
+    {
       "id": "ground-edge-is-far-enough-out",
       "guards": "the modelled ground extends far enough that its own outer edge is beyond the range where the sea bed still reads through the water -- the original tray was visible because the ground stopped at 19.5 km, not because it had an edge at all",
       "note": "This entry SURVIVED once, and correctly. Its expect still named 'the ground reaches further than the water', a test renamed when the seabed-ring invariant was fixed. The mutation turned the suite red, but not on the named test, and the runner refused to score that as a pass. An expect is a reference to a test name, and renaming a test silently breaks it -- which is now checked at startup.",
@@ -1301,6 +1346,24 @@
       "find": "    const material = new THREE.MeshStandardMaterial({ color: 0x557799 });\n    const itemGroup = new THREE.Group();\n    for (const geo of partList) itemGroup.add(new THREE.Mesh(geo, material));\n    const origin = atomOrigin(piece.cell.i, piece.cell.j);\n    const { w, d } = piece.foot;\n    const longAlongW = w >= d;\n    const x = longAlongW ? origin.x + w / 2 : origin.x + w + model.footprint.d / 2 + 0.3;\n    const z = longAlongW ? origin.z + d + model.footprint.d / 2 + 0.3 : origin.z + d / 2;\n    itemGroup.position.set(x, 0, z);\n    itemGroup.rotation.y = longAlongW ? 0 : Math.PI / 2;",
       "replace": "    const material = new THREE.MeshStandardMaterial({ color: 0x557799 });\n    const itemGroup = new THREE.Group();\n    for (const geo of partList) itemGroup.add(new THREE.Mesh(geo, material));\n    const origin = atomOrigin(piece.cell.i, piece.cell.j);\n    const { w, d } = piece.foot;\n    const longAlongW = w >= d;\n    const x = longAlongW ? origin.x + w / 2 : origin.x + w + model.footprint.d / 2 + 0.3;\n    const z = longAlongW ? origin.z + d + model.footprint.d / 2 + 0.3 : origin.z + d / 2;\n    itemGroup.position.set(x, 0, z);\n    itemGroup.rotation.y = 0;",
       "expect": "B4 gate: scatterBusShelters positions and ROTATES a shelter correctly on an east/west (long-along-d) road span -- a position-only assertion cannot see a shelter facing the wrong way"
+    },
+    {
+      "id": "look-proof-material-glsl3",
+      "guards": "createLookProofMaterial's ShaderMaterial sets glslVersion: THREE.GLSL3 -- required for sampler2DArray/texture(sampler2DArray,...) sampling, which do not exist in GLSL ES 1.00. Without it the shader fails to compile and the mesh renders nothing.",
+      "note": "A real defect, not a hypothetical one: the first real render of look-proof-scene.html was a blank white canvas with ZERO console errors and 'draw calls: 1, triangles: 1270' -- green on every measure available without a GPU, drawing nothing. Manually mutated (sed) and confirmed CAUGHT, then restored byte-identical (diff confirmed) before this entry was written.",
+      "file": "public/look-proof-material.js",
+      "find": "    glslVersion: THREE.GLSL3,",
+      "replace": "    // glslVersion removed by mutation",
+      "expect": "look-proof-material.js sets glslVersion: THREE.GLSL3 -- required for sampler2DArray, and a real regression once"
+    },
+    {
+      "id": "look-proof-scene-preserve-drawing-buffer",
+      "guards": "look-proof-scene.html's WebGLRenderer sets preserveDrawingBuffer: true. scripts/shoot-look-proof.mjs reads the canvas via toDataURL() in a separate page.evaluate() call after render() -- without this flag that read can race the browser's own buffer clear and capture blank white.",
+      "note": "Found the same session as look-proof-material-glsl3, same symptom (blank canvas, no errors). Every other headless-shoot pipeline in this repo (scripts/shoot-kitbash-contact-sheet.mjs, scripts/shoot-buildings-self-shadow.mjs, public/kitbash-*.html) already sets this flag for the identical reason. Manually mutated (sed) and confirmed CAUGHT, then restored byte-identical (diff confirmed) before this entry was written.",
+      "file": "public/look-proof-scene.html",
+      "find": "logarithmicDepthBuffer: true, preserveDrawingBuffer: true });",
+      "replace": "logarithmicDepthBuffer: true });",
+      "expect": "look-proof-scene.html sets preserveDrawingBuffer: true on its WebGLRenderer -- required for the shoot script's toDataURL() read, and a real regression once"
     },
     {
       "id": "world-layer-locked-area-refuses-entry",

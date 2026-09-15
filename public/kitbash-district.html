@@ -29,8 +29,18 @@
 <canvas id="c"></canvas>
 <script type="module">
 import * as THREE from "three";
-import { assembleBuilding } from "./kitbash-assembler.js";
+import { assembleBuilding, assembleNamedDesign } from "./kitbash-assembler.js";
 import { DESIGN_RECIPE_MAP } from "./kitbash-recipe-map.js";
+
+// RUN2 item 3: DESIGN_RECIPE_MAP was imported here and never read again --
+// the two landmark slots below rendered a random assembleBuilding() result
+// like every other plot, so none of the 40 curated designs this page's own
+// import implied it would show ever actually appeared. Now they do, by
+// name, via assembleNamedDesign() (public/kitbash-assembler.js).
+const LANDMARK_DESIGNS = ["art-deco-skyscraper", "wave-tower"];
+for (const id of LANDMARK_DESIGNS) {
+  if (!DESIGN_RECIPE_MAP[id]) throw new Error(`kitbash-district.html: "${id}" is not in DESIGN_RECIPE_MAP`);
+}
 
 const canvas = document.getElementById("c");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
@@ -84,6 +94,7 @@ for (let gx = 0; gx < gridSize; gx++) {
     // Standard: 6 / 25 (24%)
     // Fabric: 17 / 25 (68%)
     const isLandmarkSlot = (gx === 2 && gz === 2) || (gx === 1 && gz === 3);
+    const landmarkDesignId = gx === 2 && gz === 2 ? LANDMARK_DESIGNS[0] : LANDMARK_DESIGNS[1];
     const isStandardSlot = !isLandmarkSlot && ((gx === 0 && gz === 2) || (gx === 4 && gz === 2) || (gx === 2 && gz === 0) || (gx === 2 && gz === 4) || (gx === 3 && gz === 1) || (gx === 1 && gz === 1));
 
     let style = "fabric";
@@ -102,7 +113,9 @@ for (let gx = 0; gx < gridSize; gx++) {
     }
 
     const seed = gx * 100 + gz * 10 + 17;
-    const bld = assembleBuilding({ foot, style, seed, lod: 0 }, THREE);
+    const bld = isLandmarkSlot
+      ? assembleNamedDesign(landmarkDesignId, { lod: 0 }, THREE)
+      : assembleBuilding({ foot, style, seed, lod: 0 }, THREE);
 
     const bldGroup = new THREE.Group();
     const px = (gx - (gridSize - 1) / 2) * spacing;

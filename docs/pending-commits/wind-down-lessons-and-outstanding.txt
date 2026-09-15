@@ -1,0 +1,51 @@
+Wind-down: LESSONS.md entry for the comment-matching regex, outstanding
+list written into U4's audit doc
+
+Stopping for the night on Mark's instruction -- everything left in this
+lane's queue needs a browser, and this machine has held under this
+project's 4 GB floor most of tonight with the other lane actively
+generating worlds. Two documentation entries before stopping, both
+requested explicitly rather than left for next session to reconstruct from
+conversation.
+
+docs/LESSONS.md gains a new entry: test/navPad.test.ts's mutation-test
+proof for U1's live-position fix passed on its first run despite the
+mutation being real, because the assertion's regex matched a COMMENT
+describing the call in near-identical syntax to the call itself. Fixed by
+rewording the comment; re-run correctly caught the mutation. Marked OPEN,
+matching this file's own convention for an instance-fixed-but-no-general-
+control entry (same shape as the roadkit entry above it): the general
+control -- a comment-stripping helper for this suite's raw-source
+assert.match checks, and a sweep of existing checks against it -- does not
+exist yet. Recorded per Mark's instruction as a standing warning: fifth
+time in one week a mutation has caught a test rather than code.
+
+docs/audits/U4-NAV-WHEEL.md gains an "Outstanding" section naming what
+could not be finished tonight: the wedge redesign never screenshotted with
+panels closed (Tour didn't clear them under the stubbed-renderer
+environment; a broader dismiss-fallback destabilized an already-strained
+server and overwrote the one good capture with a corrupted one); U1's
+live-position fix not re-watched in e2e/panelOverlap.spec.ts (structural
+and mutation checks stand in, not a substitute); U2 (mobile grounding) not
+started at all; bug 2 (the CSS cascade failure) still UNEXPLAINED, nothing
+new; the new LESSONS.md entry itself still OPEN. Also corrected a stale
+reference in that same doc's "workaround" section -- it named OPEN_OFFSET,
+which the pie-wedge redesign later superseded with WEDGES/wedgePath; fixed
+so the doc does not describe code that no longer exists.
+
+The CLAUDE.md "lanes do not kill processes" rule Mark asked to be added was
+already committed earlier this session (7aaa92a) -- verified present,
+matching the instruction, not re-added.
+
+Tree state, reported precisely rather than matched to an expected count:
+package.json modified (known, pre-existing, benign, unrelated to this
+session). Ten docs/pending-commits/*.txt files untracked, all predating
+this conversation (Phase A-D commit-message sources whose commits landed
+without the source file itself being staged alongside) -- not touched this
+session, not committed here, since committing files with no context on why
+they were left that way is a "nothing is deleted, categorise and confirm
+first" question this session cannot answer.
+
+Verified: node test/run.mjs navPad.test.ts navWheel.test.ts
+navBindings.test.ts livePosition.test.ts -- 29/29 pass. npx tsc --noEmit
+clean. Documentation-only change, no code touched.

@@ -181,13 +181,19 @@ polish.
 ```
 [x] --     Shared comment-stripping helper, swept 9 files, live mutation  bac6c1b
 [x] --     "Buildings read as basic" traced to its real cause            a349b05
-[ ] F1     Facade texture variety -- 4 window grids serve 17,108 buildings
+[x] F1     Facade texture variety -- 4 window grids serve 17,108 buildings
              gate: distinct facade materials reachable from real placements,
              measured from the caller in city-render.js, floor well above 4
+             `node test/run.mjs facadeVariants.test.ts` -> 16/16 pass, GATE
+             reads 16 distinct materials (was 4 pre-merge)             5810c2f
 [ ] F2     The rest of the K6 buildings checklist, in K6's own priority order
 [ ] F3     Kitbash variety -- what reaches the world vs what the registry holds
 [ ] F4     The comment-strip sweep finished as a CATEGORY, not nine files
-[ ] K7.1   The atlas gap -- code-verified, never visually verified
+[x] K7.1   The atlas gap -- code-verified, never visually verified
+             `node scripts/shoot.mjs "In the street" "Downtown corner"` ->
+             real cornice/string-course trim visible, textured, distinct
+             from flat wall and flat roof, on two separate buildings.
+             .shots/in-the-street.png, .shots/downtown-corner.png       eb863ee
 [ ] B6     The interface. Mobile is the open part: world fills the screen,
              landscape, prompt box findable, touch, and the touch-action gap
              on #world-canvas found and never fixed.

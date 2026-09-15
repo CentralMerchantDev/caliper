@@ -2,10 +2,13 @@
 // CALIPER — 40 DESIGN KIT RECIPE MAP & RARITY MATRIX (Phase A4)
 //
 // Maps each of the 40 canonical library designs to modular kitbash recipes.
-// Enforces rarity policy:
-//   - Landmark (12 designs ~30% of library, <= 10% of world placements): sculptural forms
-//   - Standard (12 designs ~30% of library, ~25% of world placements): structured commercial/residential
-//   - Fabric (16 designs ~40% of library, ~65% of world placements): plain background urban massing
+// Enforces rarity policy (measured against the real table below, not
+// declared and left to drift -- this comment previously said 12/12/16,
+// 30/30/40%; the table has always actually held 14/10/16, 35/25/40%,
+// which is what test/kitbashRecipeMap.test.ts has asserted all along):
+//   - Landmark (14 designs, 35% of library, <= 10% of world placements): sculptural forms
+//   - Standard (10 designs, 25% of library, ~25% of world placements): structured commercial/residential
+//   - Fabric (16 designs, 40% of library, ~65% of world placements): plain background urban massing
 // =============================================================================
 
 export const DESIGN_RECIPE_MAP = {
@@ -63,7 +66,11 @@ export const DESIGN_RECIPE_MAP = {
     rarity: 'standard',
     category: 'civic',
     foot: { w: 32, d: 24 },
-    recipe: ['podium-entrance-plaza', 'shaft-twin-atrium', 'crown-open-pergola'],
+    // shaft-twin-atrium is a paired-volume form; a connector between the
+    // two atria is a real reading of "hub," not an arbitrary addition.
+    // connector-cantilever-walkway (RUN2 item 3): registered, buildable,
+    // never referenced by any of the other 39 designs before this.
+    recipe: ['podium-entrance-plaza', 'shaft-twin-atrium', 'connector-cantilever-walkway', 'crown-open-pergola'],
   },
   'cantilever-penthouse': {
     design: 'cantilever-penthouse',
@@ -319,7 +326,11 @@ export const DESIGN_RECIPE_MAP = {
     rarity: 'landmark',
     category: 'tower',
     foot: { w: 32, d: 32 },
-    recipe: ['podium-waterfront-base', 'shaft-twin-atrium', 'crown-sunburst-arch'],
+    // Same reasoning as canopy-hub above: shaft-twin-atrium is a paired
+    // volume. A different connector variant than canopy-hub's, so the
+    // library shows real style variety across the same structural idea
+    // rather than reusing one connector everywhere.
+    recipe: ['podium-waterfront-base', 'shaft-twin-atrium', 'connector-skybridge-glass-tube', 'crown-sunburst-arch'],
   },
   'wave-tower': {
     design: 'wave-tower',

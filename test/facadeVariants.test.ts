@@ -16,18 +16,24 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { stripSourceComments } from "./stripSourceComments.ts";
 import {
   FACADE_FAMILIES,
   FACADE_VARIANTS,
   generateFacadeAtlas,
   getFacadeMaterial,
   pickVariant,
+  tintHex,
+  spandrelTreatment,
+  floorLayout,
 } from "../public/facade-textures.js";
 // public/city-render.js and public/layout.js are quarantined, 2026-09-13,
 // Phase 1 "take it all down" (docs/specs/PHASE1-TAKEDOWN-PLAN-2026-09-13.md)
 // -- see the two BLOCKED tests below.
 
-function repoRoot(): string {
+const CHARACTERS = ["heritage", "interwar", "postwar", "contemporary"];
+
+function repoRoot() {
   let dir = fileURLToPath(import.meta.url);
   for (let up = 0; up < 6; up++) {
     dir = join(dir, "..");
@@ -37,21 +43,102 @@ function repoRoot(): string {
 }
 const ROOT = repoRoot();
 
-const CHARACTERS = ["heritage", "interwar", "postwar", "contemporary"];
-
 test("exactly four architectural characters exist, in both tables -- the 1980-2000 gap stays excluded by construction", () => {
   assert.deepEqual(Object.keys(FACADE_FAMILIES).sort(), [...CHARACTERS].sort());
   assert.deepEqual(Object.keys(FACADE_VARIANTS).sort(), [...CHARACTERS].sort(),
     "FACADE_VARIANTS must cover exactly the four approved characters, not a fifth era filling the postwar/contemporary gap");
 });
 
-test("each character has real variety -- at least 3 variants, 12+ total, well above the 4 atlases this replaces", () => {
+test("each character has real variety -- at least 4 variants, 16+ total, well above the 4 atlases this replaces", () => {
   let total = 0;
   for (const char of CHARACTERS) {
-    assert.ok(FACADE_VARIANTS[char].length >= 3, `${char} has only ${FACADE_VARIANTS[char].length} variants`);
+    assert.ok(FACADE_VARIANTS[char].length >= 4, `${char} has only ${FACADE_VARIANTS[char].length} variants`);
     total += FACADE_VARIANTS[char].length;
   }
-  assert.ok(total >= 12, `only ${total} total variants across all characters`);
+  assert.ok(total >= 16, `only ${total} total variants across all characters`);
+});
+
+test("RUN3: tintHex scales an RGB colour and clamps to valid bytes", () => {
+  assert.equal(tintHex("#804020", 1), "rgb(128, 64, 32)");
+  assert.equal(tintHex("#804020", 0.5), "rgb(64, 32, 16)");
+  assert.equal(tintHex("#804020", 2), "rgb(255, 128, 64)", "must clamp at 255, not overflow or wrap");
+  assert.equal(tintHex("#000000", 5), "rgb(0, 0, 0)", "zero stays zero regardless of factor");
+});
+
+test("RUN3: spandrelTreatment gives metal variants real PBR values, not just a different diffuse colour", () => {
+  const spec = { stoneTrim: "#d4cbbe", roughnessTrim: 0.75 };
+  const stone = spandrelTreatment({ spandrelMaterial: "stone" }, spec, 10);
+  assert.equal(stone.diffuse, spec.stoneTrim);
+  assert.equal(stone.roughByte, Math.round(0.75 * 255));
+  assert.equal(stone.metalByte, 10, "stone must pass through the wall's own metalness byte unchanged");
+
+  const metal = spandrelTreatment({ spandrelMaterial: "metal" }, spec, 10);
+  assert.notEqual(metal.diffuse, spec.stoneTrim, "metal must not reuse the stone diffuse colour");
+  assert.ok(metal.roughByte < stone.roughByte, "metal must be smoother (lower roughness) than stone");
+  assert.ok(metal.metalByte > stone.metalByte, "metal must be more metallic than the wall's own metalness byte");
+
+  const omitted = spandrelTreatment({}, spec, 10);
+  assert.deepEqual(omitted, stone, "omitting spandrelMaterial must default to stone -- every RUN2 variant relies on this");
+});
+
+test("RUN4: floorLayout gives every floor an equal share when groundFloorMult is omitted, matching this file's original size/floors behaviour", () => {
+  const floors = 8, size = 1024;
+  const { top, height } = floorLayout({}, floors, size);
+  const expectedH = size / floors;
+  for (let f = 0; f < floors; f++) {
+    assert.equal(height(f), expectedH, `floor ${f} height should be size/floors when groundFloorMult is omitted`);
+    assert.equal(top(f), f * expectedH, `floor ${f} top should be f * size/floors when groundFloorMult is omitted`);
+  }
+});
+
+test("RUN4: floorLayout gives the ground floor (the last index) real extra height when groundFloorMult > 1, and every floor still tiles exactly to `size`", () => {
+  const floors = 8, size = 1024, groundFloorMult = 1.6;
+  const { top, height } = floorLayout({ groundFloorMult }, floors, size);
+  const upperFloorH = height(0);
+  const groundFloorH = height(floors - 1);
+  assert.ok(groundFloorH > upperFloorH, `ground floor (${groundFloorH}) should be taller than an upper floor (${upperFloorH})`);
+  assert.ok(Math.abs(groundFloorH / upperFloorH - groundFloorMult) < 1e-9, "ground floor should be exactly groundFloorMult times an upper floor's height");
+  // Every floor's [top, top+height) span must tile the atlas exactly, no
+  // gaps and no overlap -- the property that actually matters for
+  // painting, not just that the ground floor number looks bigger.
+  for (let f = 0; f < floors - 1; f++) {
+    assert.ok(Math.abs((top(f) + height(f)) - top(f + 1)) < 1e-9, `floor ${f} must end exactly where floor ${f + 1} begins`);
+  }
+  assert.ok(Math.abs((top(floors - 1) + height(floors - 1)) - size) < 1e-9, "the ground floor must end exactly at the atlas edge");
+});
+
+test("RUN4: at least one variant per character has real storey-height variation (a taller ground floor), applied to an existing variant, not a new 17th one", () => {
+  // Deliberately NOT adding a fifth variant per character here -- item 2's
+  // own caution (a seventeenth variant is worth less than knowing whether
+  // the existing ones read as variety at all) applies just as much to a
+  // sixth. This adds depth to already-existing, already-counted variants.
+  for (const char of CHARACTERS) {
+    assert.equal(FACADE_VARIANTS[char].length, 4, `${char} should still have exactly 4 variants -- this axis extends existing ones, it does not add a new one`);
+    const hasGroundFloorVariation = FACADE_VARIANTS[char].some((v) => (v.groundFloorMult ?? 1) !== 1);
+    assert.ok(hasGroundFloorVariation, `${char} has no variant with a storey-height (groundFloorMult) variation`);
+  }
+});
+
+test("RUN3: at least one variant per character varies glass/frame tint or spandrel material, not just floor count and mullion", () => {
+  // RUN2 shipped floor count, window proportion, and mullion style. RUN3
+  // closes docs/audits/K6-BUILDINGS.md item 2's own named remaining gap:
+  // "no equivalent variety in window-frame colour or glass tint."
+  for (const char of CHARACTERS) {
+    const variesColour = FACADE_VARIANTS[char].some(
+      (v) => v.spandrelMaterial === "metal" || (v.glassTint ?? 1) !== 1 || (v.frameTint ?? 1) !== 1,
+    );
+    assert.ok(variesColour, `${char} has no variant with spandrel material or glass/frame tint variety`);
+  }
+});
+
+test("RUN3: glassTint/frameTint/spandrelMaterial default to unchanged on every RUN2 variant (variant 0-2), preserving RUN2's exact output", () => {
+  for (const char of CHARACTERS) {
+    for (const v of FACADE_VARIANTS[char].slice(0, 3)) {
+      assert.equal(v.spandrelMaterial ?? "stone", "stone", `${char}/${v.name} should default to a stone spandrel`);
+      assert.equal(v.glassTint ?? 1, 1, `${char}/${v.name} should default to no glass tint`);
+      assert.equal(v.frameTint ?? 1, 1, `${char}/${v.name} should default to no frame tint`);
+    }
+  }
 });
 
 test("variant 0 of every character is byte-identical to this file's values before variants existed", () => {
@@ -122,9 +209,10 @@ test("getFacadeMaterial caches per variantSeed, not just per character -- two di
 // THE GATE docs/briefs/RUN2-BLD-2026-09-09.md item 1 asks for: the count of
 // distinct facade materials reachable from REAL placements, measured from
 // the real caller in public/city-render.js (not from the registry), against
-// a floor well above four. Marked `todo`, per this suite's own established
-// convention (see test/originStability.test.ts) -- not skipped: it still
-// runs and prints today's real, honest count every time the suite does.
+// a floor well above four. Un-marked from `todo` at the 2026-09-11
+// b1-land -> codex-lane merge: public/city-render.js now passes a real
+// variantSeed into getFacadeMaterial on this branch (see the static gate
+// below), so this dynamic gate is expected to actually measure it.
 //
 // WHY THIS STAYS RED HERE, HONESTLY, RATHER THAN BEING MADE TO PASS: the
 // capability above is real and tested. Reaching it from a real placement

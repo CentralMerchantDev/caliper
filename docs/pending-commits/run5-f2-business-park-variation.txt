@@ -1,0 +1,103 @@
+F2 (K6 checklist, lowest-priority leaf item): bldBusinessParkBlock had zero
+seed-derived variation of any kind -- confirmed by reading the function
+(public/buildings.js:2947-3042 before this change): wallCol/roofCol were
+hardcoded constants (WALLS.MIDRISE[1], ROOFS.MIDRISE[0]), `seed` was used
+nowhere in the body, and there was no `options` support at all, unlike
+every sibling typology in this file. Named and correctly deprioritized in
+docs/audits/K6-BUILDINGS.md's checklist (RUN3, 0.08% of placements, 14 of
+17,108) but never closed until now.
+
+What changed. Two real values now derive from the seed, matching this
+file's own established idiom exactly (bldMidrise/bldWorkshop's
+`WALLS.T[Math.floor(rN * WALLS.T.length)]` pattern, bldVilla's
+`options.X !== undefined ? options.X : rN > threshold` override pattern):
+wallCol/roofCol are now picked per building instead of fixed, and a new
+`hasSolarArray` flag (options-overridable) gates the existing roof
+solar-panel box -- no new geometry was invented, an existing box was made
+conditional. `params: { hasSolarArray }` was added to the returned spec,
+which this function previously omitted entirely.
+
+Scope, stated honestly. This is a modest fix -- material colour plus one
+~12-tri accessory box out of 288 -- not parity with the deeper structural
+gating done for terrace/townhouse/villa/midrise/workshop. Every real
+dimension (32x48 footprint, body height, atrium, louvers, spandrels, roof
+screen, both HVAC units) stays identical across placements. Proportional
+to a 0.08%-share typology, not a claim that business park now "reads as
+varied."
+
+The gate, red first. Extended test/buildingFeatureFlags.test.ts's existing
+CASES convention with `{ typology: "bld-business-park", flag:
+"hasSolarArray" }` (triangle-count-changes assertion) and added a new,
+separate test checking wall and roof colour variation INDEPENDENTLY across
+12 seeds -- not with an OR, per a blind plan review that caught the real
+gap before any code was written: an OR-based assertion would pass even if
+one colour channel were left wired to its old hardcoded constant, which is
+exactly this project's own recorded failure class ("computed but never
+consulted"). Also extended test/buildingExplicitSize.test.ts's
+NO_CELL_OPTION_TYPOLOGIES entry for bld-business-park from a single `{}`
+option set to `[{ hasSolarArray: true }, { hasSolarArray: false }]`.
+
+  node test/run.mjs buildingFeatureFlags.test.ts buildingExplicitSize.test.ts
+  -- both new tests failed before implementation:
+  "hasSolarArray=false and hasSolarArray=true produced identical triangle
+  counts (288)" and "wall colour did not vary across 12 seeds (always
+  14081506)".
+
+Implemented, then green: same two files, 31/31 (including AS1-AS4 in
+buildingLODAndColors.test.ts and the full layoutGeometry.test.ts suite).
+`npx tsc --noEmit` clean.
+
+Mutated three times, each watched red independently, then restored and
+re-verified byte-identical against a pre-mutation backup (`diff`, empty):
+(1) hasSolarArray gate reverted to `if (true)` -- only the hasSolarArray
+triangle-count test failed ("produced identical triangle counts (288)").
+(2) wallCol alone reverted to the hardcoded constant, roofCol left varying
+-- only the colour test failed, naming wall specifically ("wall colour did
+not vary... always 14081506"), proving the AND-based assertion the blind
+review asked for actually distinguishes a half-wired fix from a fully-wired
+one. (3) roofCol alone reverted -- the same test failed again, this time
+naming roof specifically ("roof colour did not vary... always 5990000").
+
+Measured, not assumed: real LOD0 triangle counts from the artefact,
+hasSolarArray=true -> 288, false -> 276 (AS3's declared budget is 294;
+both measurements sit inside its 70%-100% band, confirmed by
+buildingLODAndColors.test.ts staying green rather than by arithmetic
+alone). Across 12 sample seeds: 9 distinct wall colours (of 13 possible in
+WALLS.MIDRISE) and 5 distinct roof colours (of 6 possible in ROOFS.MIDRISE).
+
+Blind review before implementation, per this run's brief. A fresh
+general-purpose subagent with no other context reviewed the plan against
+the real code before anything was written. It confirmed the plan was
+grounded (verified every cited line number and convention directly) and
+found one real, fixable gap: the originally-planned colour test used OR
+("at least one of wall/roof varies"), which would not catch a single
+half-wired colour channel. Fixed to independent AND-based assertions
+before implementation, as reflected above. It also flagged, correctly,
+that this fix is intentionally modest relative to the higher-priority
+typologies already fixed -- noted in this message rather than left
+implied.
+
+What is still open, unrelated to this change. F1 / K6 checklist item 1
+(the shared four-texture atlas -- the actual highest-priority "reads as
+basic" cause) remains blocked: it requires public/city-render.js to pass
+variantSeed into getFacadeMaterial, which is CLI-lane-owned and, per
+docs/CROSS-LANE-REQUESTS.md, already landed on b1-land but is not visible
+from codex-lane until the branches merge (re-confirmed this run: `grep -n
+"variantSeed" public/city-render.js` -- no match). K7.1's visual re-shoot
+and the browser-dependent interface items (U2, wedge-wheel screenshot, U1
+re-watch) remain blocked on the 4 GB memory floor: read 0.94-1.19 GB free
+this run (Get-CimInstance Win32_OperatingSystem), never approaching the
+floor. F3 (kitbash) and F4 (comment-strip sweep as a category) were
+re-confirmed still closed and unchanged (targeted test files green,
+17/17 real passes, 3 correctly skipped for zero API spend).
+
+Process note. This run's own brief pointed at docs/specs/COMPLETION-PLAN.md
+and a rule:// store (process_at, process_record_gate, process_quarantine)
+that do not exist in this repository or this session's toolset -- checked
+directly before trusting either (Glob found no COMPLETION-PLAN.md anywhere
+in the repo; the process MCP server's rule store returned empty and only
+four process_* tools were actually available, none of them the three named
+above). Fell back to the real, on-disk procedure this project already
+uses: docs/BUILD-LOOP.md, docs/OVERNIGHT-RUN.md, and the RUN2-4/K6-BUILDINGS
+audit trail, which between them establish everything the missing files
+would have. Recorded in full in docs/audits/OVERNIGHT-BLD-2026-09-10.md.
