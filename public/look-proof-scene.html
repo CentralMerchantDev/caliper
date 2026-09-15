@@ -572,21 +572,27 @@ async function main() {
   const scene = new THREE.Scene();
   scene.background = buildSkyTexture();
 
-  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 500);
+  // CAM-1 (docs/briefs/BLD-2026-09-17.md §2) -- far plane raised from 500
+  // (sized for FIX-1's own OLD, capped ~27m tower) to 3000: FIX-1's real
+  // range now reaches ~376m for mega-tower-a, and BOARD_MODE's own camera
+  // (below, positioned once shadowBB's real bounds are known) needs real
+  // headroom past that or the far plane would clip the tower before its
+  // own distance calculation even gets a chance to frame it.
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 3000);
   if (HERO_MODE) {
     // The EXACT camera 01-08 used -- pixel continuity with the shot Mark
     // actually judged, not a re-derived approximation.
     camera.position.set(-6, 34, 70);
     camera.lookAt(6, 6, 4);
   } else if (BOARD_MODE) {
-    // RB1's own demo board -- sized to BOARD_GROUND's real extent, not
-    // guessed. Same diagonal-corner angle as L12's wide camera below, for
-    // the identical reason: a straight-on approach stacks whichever
-    // piece is nearest the camera in front of everything behind it.
-    const boardCenterX = GROUND.anchor[0] + GROUND.footprint[0] / 2;
-    const boardCenterZ = GROUND.anchor[1] + GROUND.footprint[1] / 2;
-    camera.position.set(boardCenterX - 70, 130, boardCenterZ - 70);
-    camera.lookAt(boardCenterX, 0, boardCenterZ);
+    // CAM-1 -- positioned further down, once shadowBB (the real merged
+    // ground+pieces bounding box, including FIX-1's own real storeys-
+    // driven heights) exists. The old fixed (boardCenterX-70, 130,
+    // boardCenterZ-70) assumed a capped ~27m tower; against a real ~376m
+    // one it put the camera so close, relative to the tower's own real
+    // height, that the near face filled the whole frame top to bottom
+    // (35-board-fix1-real-height.png, CAM-1's own named defect) --
+    // fixable only with real data this scope does not have yet.
   } else {
     // L12's own camera -- the 01-08 sequence's close-up framing cannot see
     // a 20-piece site plan; a wider, higher angle replaces it for this item
@@ -804,6 +810,33 @@ async function main() {
   for (const g of [...preparedPieces, ...streetDetailGeoms, ...preparedBoardPieces]) {
     g.computeBoundingBox();
     shadowBB.union(g.boundingBox);
+  }
+
+  if (BOARD_MODE) {
+    // CAM-1 (docs/briefs/BLD-2026-09-17.md §2) -- framed with real
+    // trigonometry off shadowBB's own real max height (FIX-1's storeys-
+    // driven heights, not a guess) -- the SAME formula this run's own
+    // dedicated height-range shot already proved (docs/look-proof-
+    // shots/34-height-range.png): half of the tallest real piece's own
+    // height must subtend less than half the vertical FOV at distance
+    // `dist`, camera level with that piece's own real vertical midpoint.
+    // Front-on (Z offset only), not the ORIGINAL diagonal -- the
+    // diagonal existed so "a straight-on approach stacks whichever piece
+    // is nearest the camera in front of everything behind it" would not
+    // happen; checked against this board's own real BOARD_DEMO_
+    // PLACEMENTS, no two pieces share overlapping X along this camera's
+    // own single viewing axis (house x:8-16, tower-base-6x6-a x:32-56,
+    // mega-tower-a x:60-92, street-straight x:8-24 at a much deeper z),
+    // so front-on does not reintroduce the problem the diagonal was for.
+    const boardCenterX = GROUND.anchor[0] + GROUND.footprint[0] / 2;
+    const boardCenterZ = GROUND.anchor[1] + GROUND.footprint[1] / 2;
+    const CAM_FOV_DEG = 45;
+    const targetY = Math.max(shadowBB.max.y / 2, 1);
+    const halfFovRad = (CAM_FOV_DEG / 2) * (Math.PI / 180);
+    const dist = (targetY * 1.15) / Math.tan(halfFovRad); // 15% margin so the tallest piece's own top/base are not touching the frame edge
+    camera.position.set(boardCenterX, targetY, boardCenterZ - dist);
+    camera.lookAt(boardCenterX, targetY, boardCenterZ);
+    window.__boardCameraMaxHeight = shadowBB.max.y;
   }
 
   const merged = mergeGeometries([groundGeom, farGroundGeom, ...preparedPieces, ...streetDetailGeoms, ...preparedBoardPieces], false);

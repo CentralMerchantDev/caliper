@@ -416,6 +416,29 @@ test("GATE (FIX-3): the board camera's fog is 14-board.png's real settings -- RC
   assert.doesNotMatch(SCENE_SRC, /if\s*\(\s*BOARD_MODE\s*\)\s*\{\s*material\.uniforms/, "BOARD_MODE still writes to material.uniforms after construction -- 14-board.png used the shared construction-time defaults with no per-camera override at all");
 });
 
+test("GATE (CAM-1): the board camera is no longer positioned before the real board is resolved -- BOARD_MODE's own camera.position.set must not appear in the early, pre-board camera block", () => {
+  const earlyBlock = SCENE_SRC.slice(SCENE_SRC.indexOf("const camera = new THREE.PerspectiveCamera"), SCENE_SRC.indexOf("const [{ tex: arrayTex, manifest }, ...pieceGeoms]"));
+  assert.doesNotMatch(earlyBlock, /BOARD_MODE[\s\S]{0,800}camera\.position\.set/, "the board camera is still positioned in the early block, before boardResolved/shadowBB exist -- 35-board-fix1-real-height.png's own defect (a camera framed for the OLD capped heights, now showing a wall) would still apply");
+});
+
+test("GATE (CAM-1): the board camera is repositioned AFTER shadowBB exists, using its own real max height -- never a hardcoded distance/elevation guessed independent of what is actually on the board", () => {
+  const afterShadowBB = SCENE_SRC.slice(SCENE_SRC.indexOf("shadowBB.union(groundGeom.boundingBox)"));
+  assert.match(afterShadowBB, /BOARD_MODE/, "no BOARD_MODE-specific block found after shadowBB is computed");
+  // Precise, not just "shadowBB.max.y appears somewhere in this block" --
+  // that regex SURVIVED a mutation that hardcoded `dist` to a fixed 100,
+  // because targetY's own line still mentioned shadowBB.max.y even though
+  // the actual camera distance no longer depended on it. Anchored on the
+  // targetY declaration itself, the one value that actually reaches both
+  // the distance calc and camera.position.set/lookAt below it.
+  assert.match(afterShadowBB, /const targetY = Math\.max\(shadowBB\.max\.y \/ 2, 1\);/, "targetY is not computed from shadowBB's own real max height");
+  assert.match(afterShadowBB, /const dist = \(targetY \* 1\.15\) \/ Math\.tan\(halfFovRad\);/, "the board camera's own distance is not derived from targetY (and so, transitively, from shadowBB's real max height) -- a hardcoded distance would leave this line unchanged while shadowBB.max.y still appears elsewhere in the block, unused");
+  assert.match(afterShadowBB, /camera\.position\.set\(boardCenterX, targetY, boardCenterZ - dist\);/, "camera.position.set does not use the real targetY/dist this block just computed");
+});
+
+test("GATE (CAM-1): the camera's own far clipping plane is wide enough for FIX-1's real range -- 500 (the old value, sized for a ~27m capped tower) would clip a real ~376m mega-tower before the far plane even lets it render", () => {
+  assert.doesNotMatch(SCENE_SRC, /new THREE\.PerspectiveCamera\(45, window\.innerWidth \/ window\.innerHeight, 0\.5, 500\)/, "the camera's own far plane is still the old 500 -- too short for FIX-1's real height range");
+});
+
 test("GATE (RB5): the paved layer's own index is read from the REAL array-texture manifest, never hardcoded -- board-renderer.js's own layerForGlb discipline, applied here too", () => {
   assert.match(SCENE_SRC, /const pavedLayerIndex = manifest\.layers\.find\(\(l\) => l\.file\.includes\("ground-paved"\)\)\.index/, "the paved layer's own index is not resolved from the real manifest");
 });

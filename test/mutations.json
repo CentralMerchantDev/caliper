@@ -1812,6 +1812,30 @@
       "find": "storeys: entry.storeys,",
       "replace": "storeys: undefined,",
       "expect": "GATE (FIX-1): resolveBoardPieces reads storeys directly from the real catalogue entry -- never invented, never computed here"
+    },
+    {
+      "id": "cam1-board-camera-must-stay-height-aware",
+      "guards": "CAM-1 (docs/briefs/BLD-2026-09-17.md): the board camera's own height-aware distance calc reverts to a fixed value not driven by shadowBB's own real max height -- the same defect 35-board-fix1-real-height.png named.",
+      "file": "public/look-proof-scene.html",
+      "find": "const dist = (targetY * 1.15) / Math.tan(halfFovRad); // 15% margin so the tallest piece's own top/base are not touching the frame edge",
+      "replace": "const dist = 100;",
+      "expect": "GATE (CAM-1): the board camera is repositioned AFTER shadowBB exists, using its own real max height -- never a hardcoded distance/elevation guessed independent of what is actually on the board"
+    },
+    {
+      "id": "cam1-overview-storeys-must-stay-wired",
+      "guards": "CAM-1: overview-scene.html's own buildBoardMesh stops passing p.storeys to fitToFootprint -- entering an area would silently show the old, capped height while look-proof-scene.html's own board shows the real one.",
+      "file": "public/overview-scene.html",
+      "find": "fitToFootprint(geom, p.footprint, p.anchor, p.storeys);",
+      "replace": "fitToFootprint(geom, p.footprint, p.anchor);",
+      "expect": "GATE (CAM-1): the overview's own board view passes each piece's real storeys to fitToFootprint -- FIX-1's real height, not the old default-capped path this page silently kept"
+    },
+    {
+      "id": "cam1-overview-camera-must-stay-height-aware",
+      "guards": "CAM-1: overview-scene.html's own setBoardCamera stops taking a real maxHeight and reverts to the old groundWidth-only distance formula.",
+      "file": "public/overview-scene.html",
+      "find": "function setBoardCamera(maxHeight) {",
+      "replace": "function setBoardCamera() {",
+      "expect": "GATE (CAM-1): setBoardCamera is framed off the real board mesh's own max height, not a fixed groundWidth-only distance -- the old formula assumed a compressed range, same defect look-proof-scene.html's own board camera had"
     }
   ]
 }

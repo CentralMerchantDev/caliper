@@ -133,16 +133,34 @@ async function main() {
   scene.add(light);
   scene.add(new THREE.AmbientLight(0x556070, 1.0));
 
-  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 500);
+  // CAM-1 -- far plane raised from 500 (sized for the old ~27m capped
+  // board) to 3000, matching look-proof-scene.html's own reasoning: FIX-1's
+  // real range reaches ~376m and 500 would clip mega-tower-a before
+  // setBoardCamera's own distance calculation gets a chance to frame it.
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 3000);
   function setOverviewCamera() {
     camera.position.set(-30, 180, -30);
     camera.lookAt(50, 0, 50);
   }
-  function setBoardCamera() {
+  // CAM-1 (docs/briefs/BLD-2026-09-17.md §2) -- `maxHeight` is the real
+  // board mesh's own real max Y (FIX-1's storeys-driven height, read from
+  // the actual geometry just built, never a guess). The old formula
+  // (distance from groundWidth/Depth only) assumed a compressed ~27m
+  // range -- the SAME defect look-proof-scene.html's own board camera
+  // had (35-board-fix1-real-height.png). Same trig this run's own
+  // dedicated height-range shot and look-proof-scene.html's own board
+  // camera already use: half of maxHeight must subtend less than half
+  // the vertical FOV at `dist`, camera level with that real midpoint.
+  function setBoardCamera(maxHeight) {
     const w = AREA_BOARD_WIDTH * MODULE_SIZE_M, d = AREA_BOARD_HEIGHT * MODULE_SIZE_M;
-    const dist = Math.max(w, d);
-    camera.position.set(w / 2 - dist, dist * 1.4, d / 2 - dist);
-    camera.lookAt(w / 2, 0, d / 2);
+    const groundDist = Math.max(w, d);
+    const FOV_DEG = 45;
+    const targetY = Math.max(maxHeight / 2, 1);
+    const halfFovRad = (FOV_DEG / 2) * (Math.PI / 180);
+    const heightDist = (targetY * 1.15) / Math.tan(halfFovRad);
+    const dist = Math.max(groundDist, heightDist);
+    camera.position.set(w / 2, targetY, d / 2 - dist);
+    camera.lookAt(w / 2, targetY, d / 2);
   }
   setOverviewCamera();
 
@@ -209,7 +227,13 @@ async function main() {
     const preparedPieces = pieceGeoms.map((geom, i) => {
       const p = resolved[i];
       rotateGeometryY(geom, p.rotation, THREE);
-      fitToFootprint(geom, p.footprint, p.anchor);
+      // CAM-1 -- p.storeys is real catalogue data (resolveBoardPieces
+      // above, FIX-1). Without this, height falls back to the old
+      // footprint-average path capped at 6x -- exactly the defect this
+      // item exists to close, and it would leave this page silently
+      // disagreeing with look-proof-scene.html's own board about the
+      // same catalogue entries' own real heights.
+      fitToFootprint(geom, p.footprint, p.anchor, p.storeys);
       return addLayerAttribute(stripToPositionNormalUv(geom), p.layer);
     });
     const w = AREA_BOARD_WIDTH * MODULE_SIZE_M, d = AREA_BOARD_HEIGHT * MODULE_SIZE_M;
@@ -229,7 +253,9 @@ async function main() {
     scene.add(boardMesh);
     overviewGroup.visible = false;
     groundMesh.visible = false;
-    setBoardCamera();
+    // CAM-1 -- the real mesh's own bounding box, not a guessed height.
+    mesh.geometry.computeBoundingBox();
+    setBoardCamera(mesh.geometry.boundingBox.max.y);
     mode = "board";
     renderer.render(scene, camera);
     console.log(`AREA-ENTERED area=${areaId} pieces=${board.pieces().length} loadCount=${loadCounts[areaId]}`);

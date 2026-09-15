@@ -78,3 +78,12 @@ test("(synthetic) the vulnerability: a comment mentioning worldLayer.enter must 
   const commentOnly = stripSourceComments("// const result = worldLayer.enter(areaId, { loadBoard: loadBoardForArea }) used to be here\nconst m = {};\n");
   assert.doesNotMatch(commentOnly, /const result = worldLayer\.enter\(areaId, \{ loadBoard: loadBoardForArea \}\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
 });
+
+test("GATE (CAM-1): the overview's own board view passes each piece's real storeys to fitToFootprint -- FIX-1's real height, not the old default-capped path this page silently kept", () => {
+  assert.match(SCENE_SRC, /fitToFootprint\(geom, p\.footprint, p\.anchor, p\.storeys\)/, "buildBoardMesh's own fitToFootprint call does not pass p.storeys -- entering an area from the overview would still show the old, capped ~27m heights while look-proof-scene.html's own board shows FIX-1's real ~376m range, two pages silently disagreeing about the same catalogue data");
+});
+
+test("GATE (CAM-1): setBoardCamera is framed off the real board mesh's own max height, not a fixed groundWidth-only distance -- the old formula assumed a compressed range, same defect look-proof-scene.html's own board camera had", () => {
+  assert.match(SCENE_SRC, /function setBoardCamera\(maxHeight\)/, "setBoardCamera does not take a real maxHeight argument");
+  assert.doesNotMatch(SCENE_SRC, /const dist = Math\.max\(w, d\);/, "setBoardCamera's own distance is still driven only by the board's ground width/depth, never the real height of what is actually placed on it");
+});
