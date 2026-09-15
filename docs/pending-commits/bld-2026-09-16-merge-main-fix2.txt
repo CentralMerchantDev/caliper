@@ -1,0 +1,54 @@
+Merge origin/main into codex-lane -- brings CLI's item-0 (docs/specs/
+RESEARCH.md restored, closing the dangling reference PLAN.md itself cited)
+and FIX-2 (a real storey count, baseValue/unitQuality pointed at it) onto
+this branch. codex-lane had 8 commits of its own (FIX-3, FIX-4, CAT-2,
+CAT-3, CAT-4, the handover, a gate-ledger sweep) origin/main did not yet
+have; origin/main had 4 commits (item-0, FIX-2, their own gate-ledger
+bookkeeping) codex-lane did not yet have. Merge base 116ff51.
+
+TWO REAL CONFLICTS, BOTH FROM THE SAME ROOT CAUSE -- both lanes touched
+data/catalogue.json and test/catalogueValidator.test.ts this run, in
+different fields/sections of the same files, per PLAN.md §1's own split
+("The catalogue's game fields" = CLI, "The catalogue's mesh bindings" =
+BLD):
+
+- test/catalogueValidator.test.ts: one conflict, both sides adding a new
+  import line from a different script (CLI: baseValueFor/storeysFor from
+  migrate-catalogue-s2-fields.mjs; BLD: VARIANT_BINDINGS from link-
+  catalogue-meshes.mjs). A real union, not a disagreement -- both imports
+  kept.
+
+- data/catalogue.json: 30 conflicting entries. Confirmed first, not
+  assumed: diffed the full key sets of both sides (`only in HEAD:
+  glbVariants`, `only in MAIN: storeys` -- nothing else differs) and
+  confirmed both files hold the identical 50 ids in the identical order.
+  Resolved by taking origin/main's file as the base (CLI's own storeys/
+  baseValue/unitQuality/adjacency, the value-model fields this branch
+  never touched) and re-running `node scripts/link-catalogue-meshes.mjs`
+  on top of it -- BLD's own idempotent generator, unchanged by this
+  merge, re-applying glb/glbVariants without touching anything else
+  (confirmed by reading the script: `{ ...rest, glb: ..., ...(variantIds
+  ? {glbVariants} : {}) }`, spreads every existing field first). Output
+  matched exactly: "linked 38 of 50 catalogue entries... 3 of those carry
+  a second real variant... 0 L12 meshes have no matching entry" -- the
+  identical line this branch's own CAT-2/CAT-3 commits already reported,
+  now sitting on top of CLI's own FIX-2 values. Never hand-spliced JSON.
+
+VERIFICATION: npx tsc --noEmit clean. node test/run.mjs (every test file
+either side touched this run: catalogueValidator, catalogueRegistry,
+scoring, boardRenderer, lookProofScene, catalogueContactSheet,
+shootLookProof): 227/227 pass. Spot-checked tower-base-6x6-a directly:
+storeys: 63, unitQuality/baseValue reflecting it (CLI's own fields), glb
++ glbVariants both present (this branch's own CAT-3 work) -- both sides'
+work genuinely coexists on the same entry, not one silently overwriting
+the other.
+
+A pre-existing, unrelated stray uncommitted change to docs/MODULE-MAP.md
+(present before this session started, never touched by any commit this
+run) was stashed before merging so it would not conflict with or be
+silently discarded by origin/main's own real changes to that file; left
+stashed, not restored, since it predates and is unrelated to this run's
+own work.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012fvsDWLyvbN5Dj6csGYvbA

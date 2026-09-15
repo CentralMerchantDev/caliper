@@ -38,6 +38,11 @@ test("RC4-pattern: fog is overridden for this camera's own real distance via a c
   assert.match(SCENE_SRC, /material\.uniforms\.uFogFar\.value = dist \* 4;/, "fog is not overridden for this scene's own camera distance -- pieces would render fogged into the ground's own tone, exactly the first real render's own defect");
 });
 
+test("GATE (CAT-4): the camera looks along ONE axis (front-on), not a 45-degree diagonal isometric offset -- CAT-2's own diagonal camera read as 'a diagonal strip in a field of black' (Mark, docs/briefs/BLD-2026-09-16.md), because an equal X/Z offset onto a rectangular grid photographs as a rotated diamond, not a grid", () => {
+  assert.doesNotMatch(SCENE_SRC, /camera\.position\.set\(centerX - dist,[^)]*centerZ - dist\)/, "the camera is still offset on BOTH x and z -- the rejected 45-degree diagonal isometric angle");
+  assert.match(SCENE_SRC, /camera\.position\.set\(centerX,/, "the camera's own x is not fixed at centerX -- rows would still read diagonally, not as horizontal bands");
+});
+
 test("(synthetic) the vulnerability: a comment mentioning boundEntries must not satisfy the checks above", () => {
   const commentOnly = stripSourceComments("// const boundEntries = catalogueArr.filter((e) => e.glb) used to be here\nconst m = {};\n");
   assert.doesNotMatch(commentOnly, /const boundEntries = catalogueArr\.filter\(\(e\) => e\.glb\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");

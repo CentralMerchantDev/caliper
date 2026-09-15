@@ -1835,3 +1835,65 @@ low-risk and disclosed in full in this session's own commits. The two
 harness recommendations above are additive (a try/catch, a lock or a
 new directory) and do not change `test/run.mjs`'s existing behaviour for
 any file that does not hit either failure mode.
+
+---
+
+## 25. `node test/run.mjs` (no args, the full suite) silently under-reports past a certain point — found while verifying FIX-3/FIX-4, not caused by either
+
+**RESOLVED, by CLI's own #24 above (commit `e1ba173`), independently, roughly
+a day later.** Filed here first as a finding rather than fixed unilaterally
+(BLD's own reasoning below); CLI hit the same defect verifying TER-1..5 and
+fixed it directly — a real crash guard added to `test/run.mjs`'s own import
+loop. Kept here, renumbered from a colliding `#22` at this merge (both
+lanes used the same next-free number independently), as the original
+discovery record — CLI's own `#24` entry above is the resolution, this one
+is the report.
+
+**What was found.** `test/run.mjs`'s own built-in `ℹ tests`/`ℹ pass`/
+`ℹ fail` summary block, running the FULL 142-file suite, appears exactly
+once, mid-output (the same absolute line number, byte-for-byte
+reproducible, across three separate full runs taken before and after this
+session's own edits) — but roughly 600 more lines of real test output
+(including further failures, e.g. `mutationEvidence.test.ts`'s own two
+gates) follow it. `test/shootLookProof.test.ts` (this session's own new
+file, FIX-4) is discovered and built (`# test files: 142` includes it,
+`test/.built/shootLookProof.test.mjs` exists) but its three tests' own
+title text does not appear ANYWHERE in the full-suite output — not as a
+pass, not as a fail, not at all. Run standalone
+(`node test/run.mjs test/shootLookProof.test.ts`) or paired with one other
+file, all three report correctly (3/3 pass). This is not new: the exact
+same line-927 anomaly is present in a full-suite capture taken at this
+session's own start, before `shootLookProof.test.ts` existed — so this is
+a pre-existing characteristic of running all 142 files together, not
+something either FIX-3 or FIX-4 introduced.
+
+**Why this was not fixed unilaterally.** `test/run.mjs` is the shared test
+harness, not a file either lane's own brief lists — CLI and BLD both
+depend on it, and BLD's own brief (docs/briefs/BLD-2026-09-16.md §8) names
+a specific FILES list that does not include it. The build-loop's own
+"nine regression checks pass unedited" guard is about not touching known-
+good checks, and this looks close enough to that boundary to ask rather
+than assume it is safe to change.
+
+**Why this did not block FIX-3 or FIX-4.** Both items were verified by the
+reliable path instead: `node test/run.mjs <specific file(s)>` (which does
+report completely and correctly, confirmed by pairing a new file with an
+existing one and seeing both report), plus `scripts/_mutcheck.mjs` (which
+builds and runs one file in complete isolation) for the mutation proof.
+Neither relies on the full-suite aggregate's own summary line.
+
+**Recommendation:** worth a real look by whoever owns `test/run.mjs`
+(CLI, or Mark directly) — the two live theories are (a) Node's implicit
+top-level test runner (this file relies on `node:test` auto-running
+without a separate `node --test` invocation, per its own header comment)
+completing and flushing its report once some internal threshold is
+reached while more files are still being `await import()`-ed in the loop
+below, or (b) an unrelated stdout buffering/ordering issue specific to a
+very large combined run. If (a), the fix is likely structural (e.g.
+`node --test` against the whole `.built/` directory instead of manual
+sequential `import()`), not a one-line change — worth scoping properly
+rather than guessed at under a items scoped to something else entirely.
+
+**Reversibility:** no code changed by this entry — a finding only. Nothing
+here is required to be true before proceeding; FIX-3/FIX-4 were verified
+by an independent, more reliable path.

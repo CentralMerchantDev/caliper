@@ -13,6 +13,38 @@
     color: #fff; font: 600 15px/1.3 system-ui, sans-serif; letter-spacing: .01em;
     box-shadow: 0 8px 24px rgba(0,0,0,.45); display: none; z-index: 9998;
   }
+  /* SHIP-1 -- author + reload, board mode only. Same "fixed panel, hidden by
+     default" pattern #refusal already uses, not a second styling approach. */
+  #authorPanel {
+    position: fixed; top: 14px; right: 14px; z-index: 9998; display: none;
+    padding: 12px 14px; border-radius: 11px; background: rgba(22,20,18,.85);
+    border: 1px solid rgba(255,255,255,.16); backdrop-filter: blur(12px);
+    color: #e8e4de; font: 12px/1.4 system-ui, sans-serif; width: 220px;
+  }
+  #authorPanel input, #authorPanel select {
+    width: 100%; box-sizing: border-box; margin: 3px 0 7px; padding: 5px 7px;
+    border-radius: 6px; border: 1px solid rgba(255,255,255,.2);
+    background: rgba(255,255,255,.06); color: #e8e4de; font: inherit;
+  }
+  #authorPanel button, #reloadButton {
+    width: 100%; padding: 7px; border-radius: 7px; border: none; cursor: pointer;
+    background: #4a90d9; color: #fff; font: 600 12px/1 system-ui, sans-serif;
+  }
+  #authorError { color: #ff8a80; margin-top: 6px; font-size: 11px; white-space: pre-line; }
+  #reloadButton {
+    position: fixed; bottom: 14px; right: 14px; z-index: 9998; display: none;
+    width: auto; padding: 9px 16px;
+  }
+  /* SHIP-5 (docs/briefs/BLD-2026-09-17.md §5, "a deploy manifest -- version,
+     commit, build time, on the page") -- always visible, not gated on board
+     mode: unlike #authorPanel/#reloadButton this is not a play action, it is
+     the same kind of small, always-present provenance strip a real deploy
+     dashboard shows. */
+  #deployManifest {
+    position: fixed; bottom: 14px; left: 14px; z-index: 9997;
+    padding: 5px 10px; border-radius: 8px; background: rgba(22,20,18,.7);
+    color: #9aa0a8; font: 11px/1.3 ui-monospace, monospace; letter-spacing: .01em;
+  }
 </style>
 </head>
 <body>
@@ -27,6 +59,38 @@
   <span aria-hidden="true">&#8592;</span> CALIPER
 </a>
 <div id="refusal"></div>
+<!-- SHIP-1 -- author a piece the shipped catalogue does not contain. Fields
+     collected here are the ones test/catalogueRegistry.test.ts's own
+     goodAuthoredFields() exercises; provenance (author/verifiedBy/
+     createdAt/sourceRef) and terrainMask/massing are real but fixed
+     defaults for this demo page, not exposed as inputs -- the point being
+     proven is "a NEW id/footprint/category becomes placeable, scored, and
+     indistinguishable," not a full authoring editor. -->
+<div id="authorPanel">
+  <div style="font-weight:600;margin-bottom:6px;">Author a piece</div>
+  <input id="authorId" placeholder="piece id (e.g. my-house)">
+  <input id="authorW" type="number" min="1" max="10" value="1" placeholder="width (modules)">
+  <input id="authorD" type="number" min="1" max="10" value="1" placeholder="depth (modules)">
+  <select id="authorCategory">
+    <option value="residential">residential</option>
+    <option value="commercial">commercial</option>
+    <option value="industrial">industrial</option>
+    <option value="civic">civic</option>
+    <option value="landmark">landmark</option>
+  </select>
+  <button id="authorSubmit" type="button">Author &amp; select as brush</button>
+  <div id="authorError"></div>
+</div>
+<button id="reloadButton" type="button">Save &amp; Reload</button>
+<!-- SHIP-5 -- GENERATED, three spans patched by scripts/gen-deploy-manifest.mjs
+     (the same anchored-span-regex discipline scripts/gen-test-count.mjs
+     already uses on public/index.html) -- do not hand-edit the numbers/hash
+     inside. test/deployManifest.test.ts asserts this against the real repo,
+     not just against the generated record: "matches what built it" means the
+     declared commit must actually be HEAD or a real ancestor of it, checked
+     with a real `git merge-base --is-ancestor`, not just string equality
+     against a second generated file that could ALSO be stale. -->
+<div id="deployManifest">v<span id="deploy-version">0.1.0</span> · <span id="deploy-commit">b228a84</span> · <span id="deploy-build-time">2026-09-15 07:00 UTC</span></div>
 <script type="importmap">
 {"imports":{"three":"./vendor/three/three.module.min.js"}}
 </script>
@@ -36,8 +100,34 @@ import { mergeGeometries } from "./vendor/three/addons/utils/BufferGeometryUtils
 import { loadPieceGeometry, fitToFootprint, GROUND } from "./look-proof-pieces.js";
 import { createAreaBoard } from "./area-board.js";
 import { createWorldLayer } from "./world-layer.js";
-import { resolveBoardPieces, rotateGeometryY, MODULE_SIZE_M } from "./board-renderer.js";
+import { resolveBoardPieces, resolveGhost, resolveReadout, anchorForCell, rotateGeometryY, MODULE_SIZE_M } from "./board-renderer.js";
 import { createLookProofMaterial } from "./look-proof-material.js";
+// SHIP-1 (docs/briefs/BLD-2026-09-17.md §5) -- "one page, both sides: overview
+// -> area -> place -> author -> reload." Everything below this line is that
+// wiring, reusing exactly the same functions look-proof-scene.html's own
+// RC1 (place) and RDO-1 (readout) already proved out -- no logic is
+// reimplemented, only called from this page too.
+import { createPlacementSession, loadBoard } from "./placement.js";
+import { cellFromWorldXZ, handleHover, handleClick, handleCancel } from "./pointer-interaction.js";
+// createCatalogueRegistry (public/catalogue-registry.js, CLI-owned, Side B)
+// is loaded lazily below, NOT as a static import -- FOUND BY RUNNING THIS
+// PAGE, not assumed: it transitively imports scripts/migrate-catalogue-s2-
+// fields.mjs ("the migration script", explicitly off-limits to this lane),
+// which itself imports node:fs/node:url/node:path at its own top level. A
+// STATIC import of that whole graph fails module instantiation for this
+// entire page -- overview/place/reload included -- the moment the browser
+// tries to resolve "node:fs" as a URL. A dynamic import() turns that same
+// failure into a catchable promise rejection instead, so the author step
+// alone degrades honestly (reported, not hidden) while everything else on
+// this page keeps working. Filed as a real cross-lane finding, not fixed
+// here: this file is not allowed to touch either off-limits file, and the
+// fix belongs to whoever owns making catalogue-registry.js's own
+// dependency browser-safe.
+// Namespace import, not a named one -- board-renderer.js's own resolveReadout
+// comment explains why: a named `import { valueAt }` throws at parse time
+// for as long as scoring.js does not export it, and would crash this whole
+// page. Kept even though S4 has landed, for the same reason RB3 kept it.
+import * as ScoringModule from "./scoring.js";
 
 // RC2 -- "MAKE IT PLAYABLE" (docs/specs/REBUILD-CHECKLIST.md). area.js has
 // the real LOCKED/OPEN/ACTIVE state machine; world-layer.js has the real
@@ -92,6 +182,50 @@ function addLayerAttribute(geometry, layer) {
   return geometry;
 }
 
+// SHIP-1 -- the ghost overlay, PORTED VERBATIM from look-proof-scene.html's
+// own RB2/RC1 buildGhostOverlayMesh: same construction, same two colours,
+// so a valid/invalid preview reads identically on both pages.
+const GHOST_COLOR = { valid: 0x4caf50, invalid: 0xe53935 };
+function buildGhostOverlayMesh(resolved) {
+  const [gw, gd] = resolved.footprint;
+  const [gx, gz] = resolved.anchor;
+  const geom = new THREE.BoxGeometry(gw, 0.4, gd).translate(gx + gw / 2, 0.2, gz + gd / 2);
+  const material = new THREE.MeshBasicMaterial({
+    color: resolved.valid ? GHOST_COLOR.valid : GHOST_COLOR.invalid,
+    transparent: true,
+    opacity: 0.55,
+    depthWrite: false,
+  });
+  return new THREE.Mesh(geom, material);
+}
+
+// RDO-1's own on-screen readout (docs/briefs/BLD-2026-09-17.md §3), PORTED
+// VERBATIM from look-proof-scene.html's own buildReadoutLabelTexture: "the
+// ghost shows the target cell's current value and the value the piece
+// would have there... that number, changing as the cursor moves, IS the
+// reason one cell beats another." Here it updates on every hover (the
+// literal "as the cursor moves"), not a single static ?readout=x,y cell.
+function buildReadoutLabelTexture(current, ifPlaced) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "rgba(10, 12, 16, 0.85)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+  ctx.textBaseline = "middle";
+  ctx.font = "600 52px system-ui, sans-serif";
+  ctx.fillStyle = "#e8e4de";
+  ctx.fillText(`current ${current.toFixed(2)}`, 24, 84);
+  ctx.fillStyle = "#4fc3f7";
+  ctx.fillText(`ifPlaced ${ifPlaced.toFixed(2)}`, 24, 176);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 async function buildArrayTexture() {
   const manifest = await fetch("vendor/kits/array-texture/manifest.json").then((r) => r.json());
   const size = manifest.targetSize;
@@ -133,16 +267,68 @@ async function main() {
   scene.add(light);
   scene.add(new THREE.AmbientLight(0x556070, 1.0));
 
-  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 500);
+  // CAM-1 -- far plane raised from 500 (sized for the old ~27m capped
+  // board) to 3000, matching look-proof-scene.html's own reasoning: FIX-1's
+  // real range reaches ~376m and 500 would clip mega-tower-a before
+  // setBoardCamera's own distance calculation gets a chance to frame it.
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.5, 3000);
   function setOverviewCamera() {
+    // CAM-4 -- setBoardCamera widens FOV to 65 ("an expanded eye view");
+    // reset back to the construction-time 45 here, or the overview's own
+    // wide top-down shot would stay eye-camera-wide after leaving a board.
+    camera.fov = 45;
+    camera.updateProjectionMatrix();
     camera.position.set(-30, 180, -30);
     camera.lookAt(50, 0, 50);
   }
-  function setBoardCamera() {
+  // CAM-4 (docs/briefs/BLD-2026-09-18.md, scoped from CAM-2/CAM-3's own
+  // findings) -- CAM-1's own trig-framed formula (below, retired) FAILED
+  // Mark's eye on look-proof-scene.html's own board camera (36-board-
+  // cam1-real-range.png, "two flat slabs against a gradient"); this page's
+  // own copy of the SAME formula was never separately judged, but CAM-3's
+  // own measurement (taken directly against this exact function, for
+  // downtown/mega-tower-a) found it WORSE: at ~502m camera distance with
+  // the shared uFogFar=230, fogFactor is 1.0 -- complete fog-out,
+  // confirmed by rendering (a flat, detail-less silhouette). Replaced
+  // with CAM-2's own real eye-level design (see that item's own comment
+  // in look-proof-scene.html for Mark's own words) -- the SAME
+  // eyeCameraFromState shape, ported here since this file has no shared
+  // module with that one to import it from.
+  const EYE_HEIGHT_M = 1.7;
+  const EYE_STAND_DISTANCE_M = 12;
+  let eyeAnchor = new THREE.Vector3(0, EYE_HEIGHT_M, 0);
+  function eyeCameraFromState(yawDeg, pitchDeg, dolly) {
+    const yaw = (yawDeg * Math.PI) / 180;
+    const pitch = (Math.max(-10, Math.min(80, pitchDeg)) * Math.PI) / 180;
+    const forward = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+    const dollyClamped = Math.max(0, dolly);
+    const position = eyeAnchor.clone()
+      .addScaledVector(forward, -dollyClamped)
+      .add(new THREE.Vector3(0, dollyClamped * 0.3, 0));
+    const lookAtPoint = position.clone().add(forward);
+    return { position, lookAtPoint };
+  }
+  window.__eyeCameraFromState = eyeCameraFromState;
+  let eyeCameraState = { yaw: 0, pitch: 0, dolly: 0 };
+  window.__eyeCameraState = () => eyeCameraState;
+  // `resolved` is THIS area's own real resolved pieces (board-renderer.js's
+  // resolveBoardPieces, real anchor/footprint/storeys) -- an empty area
+  // (no pieces yet) stands at the board's own southern edge facing the
+  // plot, the only sensible default with no real piece to anchor on.
+  function setBoardCamera(resolved) {
     const w = AREA_BOARD_WIDTH * MODULE_SIZE_M, d = AREA_BOARD_HEIGHT * MODULE_SIZE_M;
-    const dist = Math.max(w, d);
-    camera.position.set(w / 2 - dist, dist * 1.4, d / 2 - dist);
-    camera.lookAt(w / 2, 0, d / 2);
+    const tallestPiece = resolved.length
+      ? resolved.reduce((a, b) => (b.storeys || 0) > (a.storeys || 0) ? b : a, resolved[0])
+      : null;
+    camera.fov = 65;
+    camera.updateProjectionMatrix();
+    eyeAnchor = tallestPiece
+      ? new THREE.Vector3(tallestPiece.anchor[0] + tallestPiece.footprint[0] / 2, EYE_HEIGHT_M, tallestPiece.anchor[1] - EYE_STAND_DISTANCE_M)
+      : new THREE.Vector3(w / 2, EYE_HEIGHT_M, -EYE_STAND_DISTANCE_M);
+    eyeCameraState = { yaw: 0, pitch: 0, dolly: 0 };
+    const { position, lookAtPoint } = eyeCameraFromState(0, 0, 0);
+    camera.position.copy(position);
+    camera.lookAt(lookAtPoint);
   }
   setOverviewCamera();
 
@@ -156,17 +342,111 @@ async function main() {
   // edit to the shared material file RB1's own brief said not to rewrite)
   // keeps the shader from sampling it.
   material.uniforms.uCastShadows.value = false;
+  // CAM-4 (scoped from CAM-3's own measurement) -- this page's own board
+  // view uses the SAME shared uFogFar=230 CAM-3 already found too close
+  // for FIX-1's real height range on look-proof-scene.html's board;
+  // CAM-3's own measurement was taken directly against THIS page's real
+  // camera formula (downtown/mega-tower-a, ~502m, fogFactor=1.0 --
+  // complete fog-out, confirmed by rendering). The overview mode's own
+  // pads/ground use a separate MeshLambertMaterial, never this one, so
+  // widening this unconditionally only ever affects board-mode content --
+  // the same scoping CAM-3's own BOARD_MODE-only override uses.
+  material.uniforms.uFogFar.value = 500;
 
   const catalogueArr = await fetch("data/catalogue.json").then((r) => r.json());
-  const catalogueById = Object.fromEntries(catalogueArr.map((e) => [e.id, e]));
+  // SHIP-1 -- shippedCatalogueById is the real, unmutated shipped catalogue
+  // (catalogue-registry.js's own `baseCatalogue` argument). catalogueById
+  // below is the one every board/render call actually reads: it starts as
+  // a copy of the shipped catalogue and gains one key per successfully
+  // authored entry (mutated in place, never reassigned, so every closure
+  // already holding a reference to it -- createAreaBoard's own `catalogue`
+  // param included -- sees a newly authored piece immediately).
+  const shippedCatalogueById = Object.fromEntries(catalogueArr.map((e) => [e.id, e]));
+  const catalogueById = { ...shippedCatalogueById };
+  // B1: "the board cannot tell the difference between a shipped piece and
+  // an authored one, and must not be able to" -- a real createCatalogueRegistry
+  // (public/catalogue-registry.js, untouched by this file), never a second,
+  // hand-rolled "add an entry" path. Loaded lazily, not statically -- see
+  // this file's own import comment above for the real, found reason
+  // (a transitive Node-only dependency this lane cannot touch) and why a
+  // dynamic import turns that failure into something this page can report
+  // honestly instead of crashing on.
+  let registry = null;
+  let registryLoadError = null;
+  try {
+    const mod = await import("./catalogue-registry.js");
+    registry = mod.createCatalogueRegistry(shippedCatalogueById);
+  } catch (e) {
+    registryLoadError = e;
+    console.error(`SHIP1-AUTHOR-UNAVAILABLE catalogue-registry.js failed to load in this browser: ${e.message}`);
+  }
+  window.__registryLoadError = registryLoadError ? registryLoadError.message : null;
+  // An authored entry has no `glb` (B2's own comment: "no interface, no real
+  // generation pipeline" -- catalogue-registry.js deliberately never
+  // collects or stores one). The BOARD's own rules (placement validity,
+  // scoring) read nothing about rendering and genuinely cannot tell an
+  // authored piece from a shipped one; a mesh is still needed to SHOW it,
+  // so this page assigns a real, already-shipped glb as a caller-side
+  // stand-in -- a rendering convenience for this demo page, not a claim
+  // that authoring generates novel geometry (out of scope, same as B2/B4
+  // disclose). Read once, from the real shipped entry, never invented.
+  const AUTHORED_STANDIN_GLB = shippedCatalogueById["house-a"].glb;
+  function addRenderableAuthoredEntry(fields) {
+    if (!registry) {
+      return { ok: false, errors: [{ rule: "registry-unavailable", message: `catalogue-registry.js could not be loaded in this browser: ${registryLoadError ? registryLoadError.message : "unknown error"}` }] };
+    }
+    const result = registry.addAuthoredEntry(fields);
+    if (result.ok) catalogueById[result.entry.id] = { ...result.entry, glb: AUTHORED_STANDIN_GLB };
+    return result;
+  }
+
+  // SHIP-1's own "everything they did is still there on reload" for the
+  // AUTHOR step specifically: catalogue-registry.js's own overlay is
+  // explicitly disclosed as memory-only (B2: "a Cloudflare Worker isolate
+  // is ephemeral... a durable backing store is a real, separate piece of
+  // work"), and a real page reload starts a brand new registry with an
+  // empty overlay. Persisting the ORIGINAL fields (replayed through the
+  // real addAuthoredEntry again on restore, not a second serialisation of
+  // its derived `entry`) is this page's own client-side convenience for
+  // the phase gate -- not the durable backing store B2 defers, which would
+  // need to survive across users/devices, not just this browser's reload.
+  const AUTHORED_KEY = "caliper-ship1-authored-fields-v1";
+  function restoreAuthoredEntries() {
+    const raw = localStorage.getItem(AUTHORED_KEY);
+    if (!raw) return;
+    for (const fields of JSON.parse(raw)) addRenderableAuthoredEntry(fields);
+  }
+  function persistAuthoredFields(fields) {
+    const raw = localStorage.getItem(AUTHORED_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    list.push(fields);
+    localStorage.setItem(AUTHORED_KEY, JSON.stringify(list));
+  }
+  restoreAuthoredEntries();
 
   // W5's own gate, made checkable: incremented only by a REAL load, so a
   // driving script can prove "re-entering after leaving reloads" by
   // reading this before and after a leave+re-enter, rather than trusting
   // a comment.
   const loadCounts = {};
+  // SHIP-1's own reload, for PLACEMENTS: RB4's already-proven serialize()/
+  // loadBoard() round trip (public/placement.js), triggered by a real
+  // button (below) instead of only a ?reload=1 query-param demo. A save
+  // exists for this area (SAVE_KEY_PREFIX+id in localStorage) only once a
+  // player has actually clicked "Save & Reload" while inside it -- until
+  // then this falls through to the same AREA_DEMO_PLACEMENTS every other
+  // mode already used, unchanged.
+  const SAVE_KEY_PREFIX = "caliper-ship1-save-v1:";
   function loadBoardForArea(id) {
     loadCounts[id] = (loadCounts[id] || 0) + 1;
+    const savedRaw = localStorage.getItem(SAVE_KEY_PREFIX + id);
+    if (savedRaw) {
+      const save = JSON.parse(savedRaw);
+      const { board, failures } = loadBoard({ width: AREA_BOARD_WIDTH, height: AREA_BOARD_HEIGHT, catalogue: catalogueById }, save);
+      if (failures.length) console.log(`SHIP1-RELOAD-FAILURES area=${id} ${failures.map((f) => `${f.typeId}(${f.reason})`).join(", ")}`);
+      console.log(`SHIP1-RELOADED area=${id} pieces=${board.pieces().length}`);
+      return board;
+    }
     const board = createAreaBoard({ width: AREA_BOARD_WIDTH, height: AREA_BOARD_HEIGHT, catalogue: catalogueById });
     for (const p of AREA_DEMO_PLACEMENTS[id] || []) {
       const result = board.place(p.typeId, p.anchorCell, p.rotation);
@@ -202,6 +482,16 @@ async function main() {
   let boardMesh = null;
   window.__mode = () => mode;
 
+  // SHIP-1 -- place/author state, live only while mode === "board". A real
+  // createPlacementSession per entered board (public/placement.js, RB2's
+  // own module, untouched) -- the SAME session RC1 already proved hover/
+  // commit/remove/cancel through, not a second implementation.
+  let session = null;
+  let currentAreaId = null;
+  let currentBrushTypeId = "house-a"; // a real, shipped, glb-bound id -- the same default demo brush look-proof-scene.html's own INTERACTIVE_TYPE_ID uses
+  window.__session = () => session;
+  window.__currentBrushTypeId = () => currentBrushTypeId;
+
   async function buildBoardMesh(board) {
     const { resolved, skipped } = resolveBoardPieces(board, catalogueById, manifest);
     if (skipped.length) console.log(`AREA-BOARD-SKIPPED ${skipped.map((s) => `${s.typeId}(${s.reason})`).join(", ")}`);
@@ -209,7 +499,13 @@ async function main() {
     const preparedPieces = pieceGeoms.map((geom, i) => {
       const p = resolved[i];
       rotateGeometryY(geom, p.rotation, THREE);
-      fitToFootprint(geom, p.footprint, p.anchor);
+      // CAM-1 -- p.storeys is real catalogue data (resolveBoardPieces
+      // above, FIX-1). Without this, height falls back to the old
+      // footprint-average path capped at 6x -- exactly the defect this
+      // item exists to close, and it would leave this page silently
+      // disagreeing with look-proof-scene.html's own board about the
+      // same catalogue entries' own real heights.
+      fitToFootprint(geom, p.footprint, p.anchor, p.storeys);
       return addLayerAttribute(stripToPositionNormalUv(geom), p.layer);
     });
     const w = AREA_BOARD_WIDTH * MODULE_SIZE_M, d = AREA_BOARD_HEIGHT * MODULE_SIZE_M;
@@ -218,7 +514,17 @@ async function main() {
       GROUND.layer,
     );
     const merged = mergeGeometries([groundGeomLocal, ...preparedPieces], false);
-    return new THREE.Mesh(merged, material);
+    const mesh = new THREE.Mesh(merged, material);
+    // CAM-4 (docs/briefs/BLD-2026-09-18.md, scoped from CAM-2/CAM-3's own
+    // findings) -- the eye camera below needs each real piece's own
+    // resolved anchor/footprint/storeys (the same data CAM-2's own
+    // eyeCameraFromState reads from look-proof-scene.html's boardResolved)
+    // to find the tallest real piece. Stashed on the mesh itself rather
+    // than changing this function's own return shape -- both call sites
+    // (enterBoardView, the interactive rebuild below) already just take
+    // the mesh.
+    mesh.userData.resolved = resolved;
+    return mesh;
   }
 
   async function enterBoardView(areaId) {
@@ -229,8 +535,19 @@ async function main() {
     scene.add(boardMesh);
     overviewGroup.visible = false;
     groundMesh.visible = false;
-    setBoardCamera();
+    // CAM-4 -- the real mesh's own resolved pieces (real anchor/footprint/
+    // storeys), not a guessed height.
+    setBoardCamera(mesh.userData.resolved);
     mode = "board";
+    // SHIP-1 -- a fresh session over THIS area's own real board; place/
+    // author/reload are all only reachable in board mode (the author panel
+    // and reload button below are shown only here, same "not merely
+    // ignored -- unreachable" discipline RC2's own click-gating already
+    // uses for the overview pads).
+    currentAreaId = areaId;
+    session = createPlacementSession({ board });
+    document.getElementById("authorPanel").style.display = "block";
+    document.getElementById("reloadButton").style.display = "block";
     renderer.render(scene, camera);
     console.log(`AREA-ENTERED area=${areaId} pieces=${board.pieces().length} loadCount=${loadCounts[areaId]}`);
   }
@@ -242,6 +559,12 @@ async function main() {
     groundMesh.visible = true;
     setOverviewCamera();
     mode = "overview";
+    session = null;
+    currentAreaId = null;
+    clearGhostAndReadout();
+    document.getElementById("authorPanel").style.display = "none";
+    document.getElementById("reloadButton").style.display = "none";
+    hideAuthorError();
     renderer.render(scene, camera);
     console.log(`AREA-LEFT area=${left}`);
   }
@@ -280,8 +603,231 @@ async function main() {
     await enterBoardView(areaId);
   });
 
+  // ---------------------------------------------------------------- SHIP-1: place
+  // Screen pixel -> world (x,z) on the ground plane, and the inverse -- the
+  // SAME two functions look-proof-scene.html's own RC1 block already
+  // proved, called here against THIS page's own camera/board-mesh instead
+  // of a second, independently-derived projection.
+  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  function worldXZFromClientXY(clientX, clientY) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    raycaster.setFromCamera(ndc, camera);
+    const hit = new THREE.Vector3();
+    return raycaster.ray.intersectPlane(groundPlane, hit) ? { x: hit.x, z: hit.z } : null;
+  }
+  function cellCenterToScreen(cellX, cellY) {
+    const [ax, az] = anchorForCell({ x: cellX, y: cellY });
+    const v = new THREE.Vector3(ax + MODULE_SIZE_M / 2, 0, az + MODULE_SIZE_M / 2).project(camera);
+    const rect = renderer.domElement.getBoundingClientRect();
+    return { x: rect.left + ((v.x + 1) / 2) * rect.width, y: rect.top + (1 - (v.y + 1) / 2) * rect.height };
+  }
+  window.__cellCenterToScreen = cellCenterToScreen;
+
+  let liveGhostMesh = null;
+  let liveReadoutSprite = null;
+  function clearGhostAndReadout() {
+    if (liveGhostMesh) { scene.remove(liveGhostMesh); liveGhostMesh.geometry.dispose(); liveGhostMesh.material.dispose(); liveGhostMesh = null; }
+    if (liveReadoutSprite) { scene.remove(liveReadoutSprite); liveReadoutSprite.material.map.dispose(); liveReadoutSprite.material.dispose(); liveReadoutSprite = null; }
+    window.__ghostMesh = null;
+    window.__ghostResolved = null;
+    window.__readoutResolved = null;
+  }
+  // RDO-1's own clause, live: re-reads the ghost and the real readout on
+  // EVERY call, exactly the "revalidated only when called" contract
+  // session.setGhost already keeps -- not cached, not computed once.
+  function updateGhostAndReadout() {
+    const ghost = session.getGhost();
+    const resolved = resolveGhost(ghost, catalogueById);
+    if (liveGhostMesh) { scene.remove(liveGhostMesh); liveGhostMesh.geometry.dispose(); liveGhostMesh.material.dispose(); liveGhostMesh = null; }
+    if (resolved) { liveGhostMesh = buildGhostOverlayMesh(resolved); scene.add(liveGhostMesh); }
+    window.__ghostMesh = liveGhostMesh;
+    window.__ghostResolved = resolved;
+
+    if (liveReadoutSprite) { scene.remove(liveReadoutSprite); liveReadoutSprite.material.map.dispose(); liveReadoutSprite.material.dispose(); liveReadoutSprite = null; }
+    let readoutResolved = null;
+    if (ghost) {
+      readoutResolved = resolveReadout(ScoringModule, worldLayer.boardFor(currentAreaId), catalogueById, ghost.anchorCell, currentBrushTypeId, 0);
+      if (readoutResolved.available) {
+        const [rx, rz] = anchorForCell(ghost.anchorCell);
+        const labelTex = buildReadoutLabelTexture(readoutResolved.current, readoutResolved.ifPlaced);
+        const labelMaterial = new THREE.SpriteMaterial({ map: labelTex, depthTest: false, depthWrite: false });
+        liveReadoutSprite = new THREE.Sprite(labelMaterial);
+        // Proportional to the real board mesh's own max height, the SAME
+        // "measured off real data, not a fixed guess" discipline RDO-1's
+        // own label already uses -- this board can hold the same real
+        // ~376m mega-tower-a look-proof-scene.html's own board can.
+        boardMesh.geometry.computeBoundingBox();
+        const labelH = Math.max(boardMesh.geometry.boundingBox.max.y * 0.13, 3);
+        liveReadoutSprite.position.set(rx + 2, labelH * 0.6, rz + 2);
+        liveReadoutSprite.scale.set(labelH * 2, labelH, 1);
+        scene.add(liveReadoutSprite);
+      }
+    }
+    window.__readoutResolved = readoutResolved;
+  }
+
+  // A commit or remove changes board.pieces() -- rebuild via the SAME
+  // buildBoardMesh() the initial enter already used, so there is exactly
+  // one place that turns a board into a mesh, not two that could drift.
+  // Chained onto a single promise -- RC1's own fix for rapid clicks racing
+  // (a second click's rebuild finishing before the first's), applied here
+  // too since this page's rebuild is async for the identical reason
+  // (loadPieceGeometry).
+  let rebuildChain = Promise.resolve();
+  function queueRebuild() {
+    rebuildChain = rebuildChain.then(async () => {
+      const board = worldLayer.boardFor(currentAreaId);
+      const mesh = await buildBoardMesh(board);
+      if (boardMesh) { scene.remove(boardMesh); boardMesh.geometry.dispose(); }
+      boardMesh = mesh;
+      scene.add(boardMesh);
+    });
+    return rebuildChain;
+  }
+
+  // CAM-4 -- drag-to-look, wheel-to-pan-out, the SAME gesture look-proof-
+  // scene.html's own CAM-2 block already proved (see that block's own
+  // comment for the full reasoning): a held button with real pixel
+  // movement looks around and suppresses placement for that gesture; a
+  // held button with no real movement, released, is still a click.
+  const DRAG_THRESHOLD_PX = 4;
+  let dragState = null;
+  function applyEyeCamera(yaw, pitch, dolly) {
+    const { position, lookAtPoint } = eyeCameraFromState(yaw, pitch, dolly);
+    camera.position.copy(position);
+    camera.lookAt(lookAtPoint);
+    eyeCameraState = { yaw, pitch, dolly };
+  }
+
+  renderer.domElement.addEventListener("pointermove", (e) => {
+    if (mode !== "board") return;
+    if (dragState) {
+      const dx = e.clientX - dragState.startX;
+      const dy = e.clientY - dragState.startY;
+      if (Math.abs(dx) > DRAG_THRESHOLD_PX || Math.abs(dy) > DRAG_THRESHOLD_PX) dragState.moved = true;
+      if (dragState.moved) {
+        const SENSITIVITY_DEG_PER_PX = 0.15;
+        applyEyeCamera(dragState.startYaw + dx * SENSITIVITY_DEG_PER_PX, dragState.startPitch - dy * SENSITIVITY_DEG_PER_PX, eyeCameraState.dolly);
+        renderer.render(scene, camera);
+        return;
+      }
+    }
+    const hit = worldXZFromClientXY(e.clientX, e.clientY);
+    if (!hit) return;
+    const cell = cellFromWorldXZ(hit.x, hit.z);
+    window.__lastHoverCell = cell;
+    handleHover(session, currentBrushTypeId, cell, 0);
+    updateGhostAndReadout();
+    renderer.render(scene, camera);
+  });
+
+  renderer.domElement.addEventListener("wheel", (e) => {
+    if (mode !== "board") return;
+    e.preventDefault();
+    const DOLLY_SENSITIVITY = 0.02;
+    applyEyeCamera(eyeCameraState.yaw, eyeCameraState.pitch, Math.max(0, eyeCameraState.dolly + e.deltaY * DOLLY_SENSITIVITY));
+    renderer.render(scene, camera);
+  }, { passive: false });
+
+  renderer.domElement.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || mode !== "board") return;
+    dragState = { startX: e.clientX, startY: e.clientY, startYaw: eyeCameraState.yaw, startPitch: eyeCameraState.pitch, moved: false };
+  });
+
+  renderer.domElement.addEventListener("pointerup", async (e) => {
+    if (e.button !== 0 || mode !== "board" || !dragState) return;
+    const wasDrag = dragState.moved;
+    dragState = null;
+    if (wasDrag) return;
+    const hit = worldXZFromClientXY(e.clientX, e.clientY);
+    if (!hit) return;
+    const cell = cellFromWorldXZ(hit.x, hit.z);
+    const board = worldLayer.boardFor(currentAreaId);
+    const outcome = handleClick(board, session, cell);
+    window.__lastClickOutcome = outcome;
+    const piecesRightAfterThisClick = board.pieces().length;
+    await queueRebuild();
+    updateGhostAndReadout();
+    renderer.render(scene, camera);
+    console.log(`SHIP1-POINTER-CLICK area=${currentAreaId} cell=${cell.x},${cell.y} action=${outcome.action} ok=${outcome.result.ok} pieces=${piecesRightAfterThisClick}`);
+  });
+
+  renderer.domElement.addEventListener("contextmenu", (e) => {
+    if (mode !== "board") return;
+    e.preventDefault();
+    handleCancel(session);
+    updateGhostAndReadout();
+    renderer.render(scene, camera);
+  });
+
+  // ---------------------------------------------------------------- SHIP-1: author
+  function showAuthorError(errors) {
+    document.getElementById("authorError").textContent = errors.map((e) => `${e.rule}: ${e.message}`).join("\n");
+  }
+  function hideAuthorError() {
+    document.getElementById("authorError").textContent = "";
+  }
+  document.getElementById("authorSubmit").addEventListener("click", () => {
+    if (mode !== "board") return;
+    const id = document.getElementById("authorId").value.trim();
+    const w = Number(document.getElementById("authorW").value);
+    const d = Number(document.getElementById("authorD").value);
+    const category = document.getElementById("authorCategory").value;
+    // Fixed, real defaults for the fields this small demo form does not
+    // expose -- see the #authorPanel comment above for why. Every value
+    // below is a real, valid field addAuthoredEntry actually requires
+    // (test/catalogueRegistry.test.ts's own goodAuthoredFields), not a
+    // placeholder that happens to pass validation by accident.
+    const fields = {
+      id, footprint: [w, d], category, rotatable: true, terrainMask: ["land"], massing: ["base"],
+      author: "ship-1-demo-player", verifiedBy: "ship-1-demo", createdAt: new Date().toISOString(), sourceRef: `ship-1-demo-${id}`,
+    };
+    const result = addRenderableAuthoredEntry(fields);
+    window.__lastAuthorResult = result;
+    if (!result.ok) {
+      showAuthorError(result.errors);
+      console.log(`SHIP1-AUTHOR-REFUSED id=${id} ${result.errors.map((e) => e.rule).join(",")}`);
+      return;
+    }
+    hideAuthorError();
+    persistAuthoredFields(fields);
+    currentBrushTypeId = result.entry.id; // author, then immediately place it -- the SAME session/ghost/commit path as any shipped brush
+    console.log(`SHIP1-AUTHORED id=${result.entry.id} category=${result.entry.category} footprint=${JSON.stringify(result.entry.footprint)} baseValue=${result.entry.baseValue} brushSelected=true`);
+  });
+
+  // ---------------------------------------------------------------- SHIP-1: reload
+  // RB4's own proven round trip (public/placement.js serialize()/loadBoard()),
+  // triggered by a real button instead of only a ?reload=1 query-param
+  // demo. session.serialize() includes every placement whose origin is not
+  // "generated" -- AREA_DEMO_PLACEMENTS' own pieces (origin defaults to
+  // "player", area-board.js's own place()) and anything placed/authored
+  // interactively above, all in the one list loadBoardForArea's own
+  // SAVE_KEY_PREFIX branch replays on the next load.
+  document.getElementById("reloadButton").addEventListener("click", () => {
+    if (mode !== "board" || !session || !currentAreaId) return;
+    const save = session.serialize({ seed: "ship1-demo", generatorParams: null });
+    localStorage.setItem(SAVE_KEY_PREFIX + currentAreaId, JSON.stringify(save));
+    console.log(`SHIP1-SAVE area=${currentAreaId} placements=${save.placements.length}`);
+    location.reload();
+  });
+
   window.addEventListener("keydown", (e) => {
     if (e.key !== "Escape" || mode !== "board") return;
+    // A live ghost is cancelled first -- only Escape with NO ghost showing
+    // leaves the board, so RC2's own "Escape leaves the board" gate stays
+    // true exactly when it always was (no hover having happened yet), and
+    // a player mid-preview does not lose their whole board view by
+    // accident when they only meant to drop what they were about to place.
+    if (session && session.getGhost()) {
+      handleCancel(session);
+      updateGhostAndReadout();
+      renderer.render(scene, camera);
+      return;
+    }
     leaveBoardView();
   });
 

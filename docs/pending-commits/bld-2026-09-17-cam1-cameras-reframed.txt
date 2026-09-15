@@ -1,0 +1,97 @@
+CAM-1: three cameras assumed a compressed range -- the board, the
+overview, and (checked, not re-fixed) the contact sheet.
+
+WHAT WAS WRONG: docs/briefs/BLD-2026-09-17.md CAM-1 (§2), CHECKLIST.md
+CAM-1. `35-board-fix1-real-height.png` (FIX-1's own gate shot) shows a
+wall, not a range -- the board camera was still positioned by a fixed
+formula ((boardCenterX-70, 130, boardCenterZ-70)) sized for the OLD,
+capped ~27m tower. Against a real ~376m mega-tower, that put the camera
+close enough, relative to the tower's own real height, that its near face
+filled the frame top to bottom. FIX-1's own gate is "a shot showing the
+real range" and that shot did not show it.
+
+THE FIX (public/look-proof-scene.html): the board camera was positioned
+BEFORE the real board was even resolved (before `shadowBB`, the real
+merged ground+pieces bounding box, existed) -- moved to AFTER. Framed
+with real trigonometry off `shadowBB.max.y` (the SAME formula this run's
+own dedicated height-range shot, 34-height-range.png, already proved):
+`targetY = maxHeight/2`, `dist = (targetY*1.15)/tan(fov/2)`, camera level
+with the tallest real piece's own vertical midpoint, front-on (checked
+against BOARD_DEMO_PLACEMENTS' own real X ranges -- no two pieces
+overlap along this camera's single axis, so the original diagonal's own
+anti-stacking purpose does not reappear). Far clipping plane raised
+500->3000 (500 would clip a real ~376m tower before the distance calc
+even runs).
+
+A THIRD CAMERA, FOUND WHILE LOOKING, NOT NAMED IN THE BRIEF'S OWN LITERAL
+TEXT BUT CAUGHT BY ITS OWN "three cameras" FRAMING: public/overview-
+scene.html's own `buildBoardMesh` called `fitToFootprint` WITHOUT
+`p.storeys` at all. Entering an area from the overview (the real SHIP-1
+flow: pick an area, see its board) would have shown the OLD capped ~27m
+heights while look-proof-scene.html's own board and the contact sheet
+already showed FIX-1's real range -- two pages silently disagreeing about
+the same catalogue entries' own real heights. Fixed the same way: storeys
+wired into fitToFootprint, `setBoardCamera` made height-aware (same
+trig), far plane raised.
+
+TESTS: test/lookProofScene.test.ts -- three new GATE (CAM-1) tests (no
+early camera.position.set for BOARD_MODE; the real repositioning reads
+shadowBB.max.y and drives camera.position.set; the far plane is no
+longer 500). test/overviewScene.test.ts -- two new GATE (CAM-1) tests
+(storeys wired into fitToFootprint; setBoardCamera takes a real maxHeight,
+not a fixed groundWidth-only distance). node test/run.mjs
+test/lookProofScene.test.ts test/overviewScene.test.ts
+test/catalogueContactSheet.test.ts test/boardRenderer.test.ts
+test/lookProofPieces.test.ts: 130/130 pass. npx tsc --noEmit: clean.
+
+MUTATED, ALL FOUR CAUGHT, ONE TEST TIGHTENED ALONG THE WAY: node
+scripts/_mutcheck.mjs -- cam1-board-camera-must-stay-height-aware
+SURVIVED on the first pass (hardcoding `dist` to a fixed 100 left the
+test's own regex passing, because `shadowBB.max.y` still appeared
+elsewhere in the block, in `targetY`'s own declaration, even though the
+real distance no longer depended on it). Per rule://build-loop: fixed the
+TEST, not the mutation -- anchored on the exact `targetY`/`dist`/
+`camera.position.set` lines that actually chain shadowBB's real value
+through to the camera, not just "the string appears somewhere nearby".
+Re-ran: CAUGHT. cam1-overview-storeys-must-stay-wired and
+cam1-overview-camera-must-stay-height-aware both CAUGHT cleanly. All four
+against a GREEN baseline, source files restored byte-identical.
+
+MEASURED, RENDERED, LOOKED AT (rule://background-promotion-evidence --
+exit 0 is not evidence, the `35` framing was already the fourth instance
+of trusting a render without looking, per this brief's own §8):
+docs/look-proof-shots/36-board-cam1-real-range.png -- camera clearly
+outside every footprint, both towers' full real height visible top to
+bottom with a real, visible proportional difference between them.
+docs/look-proof-shots/23-area-entered.png -- regenerated via the REAL
+interactive driver (node scripts/interact-overview-scene.mjs: "RC2 GATE:
+pass", every assertion green, including the real world-layer state), the
+same result from the overview's own board view. node scripts/interact-
+look-proof.mjs also re-run to confirm the board camera change did not
+break RC1's own click/commit/remove flow: "RC1 GATE: pass".
+
+SAID PLAINLY, NOT HIDDEN: the two smaller demo pieces (house-a, street-
+straight) are NOT legible in 36's own frame at the distance the mega-
+tower's real height requires. The same honest tension the dedicated
+height-range shot and the contact sheet already surfaced -- an 82:1 real
+ratio cannot show both ends of the range legibly in one frame with a
+single fixed camera. Not solved here; disclosed, matching how FIX-1 and
+CAT-4 already disclosed the same shape of limitation rather than presenting
+a partial fix as complete.
+
+RE-RENDERED THE CAT-4 CONTACT SHEET, JUDGED FRESH, NOT ASSUMED FINE:
+docs/look-proof-shots/27-catalogue-contact-sheet.png regenerated (byte-
+identical to what FIX-1 already produced -- its own camera code was not
+touched in this item). Looked at it again and answered CAM-1's own
+question plainly: NO, the grid does not fully read now that one piece is
+eighty times another -- mega-tower-a and tower-base-6x6-a still clip off
+the top of frame. Not re-attempted a third time here: FIX-1's own commit
+already tried and rejected two adjustments to this exact camera (an
+elevated angled reframe still clipped the tower; a distance driven off
+the real merged height shrank the other 37 pieces to unreadable) -- a
+real, so-far-unsolved tension between "the grid reads" and "the range
+reads" in one 38-piece frame, named as open rather than silently retried
+without a genuinely new approach.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012fvsDWLyvbN5Dj6csGYvbA

@@ -77,23 +77,79 @@ export const MESH_BINDINGS = {
   // tileType read from the mesh's own descriptive name against the catalogue's own vocabulary.
   "street-tile-4wide": "street-straight",
   "street-bend": "street-curve", // "bend" and "curve" name the same real-world road shape
-  // LEAST CERTAIN OF THE THREE ROAD BINDINGS, disclosed: "crossing" reads as
-  // a 4-way intersection ("cross"), not a 3-way ("t") -- Kenney's own city
-  // kits conventionally ship a single "crossing" piece as the 4-way, but
-  // nothing sourced confirms this specific model's own arm count.
+  // CORRECTED, CAT-2 (2026-09-16, docs/briefs/BLD-2026-09-16.md): this
+  // mesh id's own glb (public/look-proof-pieces.js) was road-crossing.glb
+  // -- "LEAST CERTAIN OF THE THREE ROAD BINDINGS" per BO7A's own original
+  // disclosure here, and the doubt was correct. Rendered both candidates
+  // top-down against the pack's own real texture: road-crossing.glb is a
+  // STRAIGHT road with a crosswalk painted on it, not a junction at all.
+  // The id "street-crossing" is kept (so this table's own key does not
+  // need restructuring) but now points at road-crossroad.glb, a genuine
+  // 4-way -- see public/vendor/kits/LICENCES.md's own CAT-2 entry.
   "street-crossing": "street-cross",
+
+  // CAT-2 (2026-09-16, docs/briefs/BLD-2026-09-16.md, PLAN.md §5.1) -- 26
+  // dedicated instances (public/look-proof-pieces.js) of the two already-
+  // vendored road shapes (straight, curve) plus three newly-verified ones
+  // (intersection="t", crossroad="cross", end), one per catalogue
+  // footprint tier. tileType (the catalogue's own field) names the shape
+  // directly; each mesh id below is spelled identically to its target
+  // catalogue id since it is a dedicated, non-shared instance.
+  "lane-straight": "lane-straight",
+  "lane-curve": "lane-curve",
+  "lane-t": "lane-t",
+  "lane-cross": "lane-cross",
+  "lane-end": "lane-end",
+  "street-t": "street-t",
+  "street-end": "street-end",
+  "avenue-straight": "avenue-straight",
+  "avenue-curve": "avenue-curve",
+  "avenue-t": "avenue-t",
+  "avenue-cross": "avenue-cross",
+  "avenue-end": "avenue-end",
+  "highway-straight": "highway-straight",
+  "highway-curve": "highway-curve",
+  "highway-t": "highway-t",
+  "highway-cross": "highway-cross",
+  "highway-end": "highway-end",
+  "lane-street-t": "lane-street-t",
+  "lane-street-cross": "lane-street-cross",
+  // "transition" tileType has no dedicated taper/merge mesh in this pack
+  // -- reuses road-straight.glb (see look-proof-pieces.js's own comment
+  // on these three entries, and LICENCES.md's CAT-2 entry, for why a
+  // plausible fifth asset, road-split.glb, was found and set aside
+  // instead of used here).
+  "lane-street-transition": "lane-street-transition",
+  "street-avenue-t": "street-avenue-t",
+  "street-avenue-cross": "street-avenue-cross",
+  "street-avenue-transition": "street-avenue-transition",
+  "avenue-highway-t": "avenue-highway-t",
+  "avenue-highway-cross": "avenue-highway-cross",
+  "avenue-highway-transition": "avenue-highway-transition",
 };
 
-// L12 meshes with NO available catalogue slot -- both a same-footprint,
-// same-category entry already taken by another L12 mesh above, and no
-// second slot of that category exists at that footprint to bind to instead.
-// A finding for the handover, not silently dropped and not force-bound to a
-// DIFFERENT category with no signal supporting the choice.
-export const UNMATCHED_MESHES = [
-  "midrise-4x4-alt", // only 4x4 residential slot (apartment-block-a) already taken by midrise-4x4
-  "tower-base-6x6-alt", // only 6x6 landmark slot (tower-base-6x6-a) already taken by tower-base-6x6
-  "commercial-2x2-alt", // only 2x2 commercial slot (corner-shop-a) already taken by commercial-2x2
-];
+// CAT-3 (docs/specs/PLAN.md §5.2, Mark: "two towers of the same footprint
+// should not be the same tower"). These three were the exact reason UNMATCHED_
+// MESHES existed BEFORE CAT-3 -- "only ONE catalogue slot of that footprint+
+// category exists, already taken by another L12 mesh". Nothing about that has
+// changed (CAT-2's own "no new entries, no changed footprint or category"
+// still holds); what changed is public/board-renderer.js can now hold a
+// SECOND real mesh per catalogue entry (glbVariants) and pick between them per
+// PLACEMENT, so an entry with no second SLOT can still have a second LOOK.
+// R2/C1.5's own "start far lower than instinct says": zero new assets, these
+// three were already vendored, licensed and sitting unused.
+export const VARIANT_BINDINGS = {
+  "tower-base-6x6-a": ["tower-base-6x6-alt"],
+  "apartment-block-a": ["midrise-4x4-alt"],
+  "corner-shop-a": ["commercial-2x2-alt"],
+};
+
+// L12 meshes with NO available catalogue slot AND no plausible variant use --
+// both a same-footprint, same-category entry already taken by another L12
+// mesh above, and no second slot of that category exists at that footprint to
+// bind to instead. A finding for the handover, not silently dropped and not
+// force-bound to a DIFFERENT category with no signal supporting the choice.
+export const UNMATCHED_MESHES = [];
 
 // L12 meshes considered and deliberately excluded -- scene dressing, never a
 // catalogue piece. See this file's own header.
@@ -108,22 +164,32 @@ export const PROP_MESH_IDS = [
 function main() {
   const catalogue = JSON.parse(readFileSync(CATALOGUE_PATH, "utf8"));
   const glbByMeshId = new Map(PIECES.map((p) => [p.id, p.glb]));
+  const variantMeshIds = Object.values(VARIANT_BINDINGS).flat();
 
   // Every id this script's own tables name must be a real look-proof-pieces.js
   // mesh -- a typo here would silently bind nothing rather than error.
   const realMeshIds = new Set(PIECES.map((p) => p.id));
-  for (const meshId of [...Object.keys(MESH_BINDINGS), ...UNMATCHED_MESHES, ...PROP_MESH_IDS]) {
+  for (const meshId of [...Object.keys(MESH_BINDINGS), ...variantMeshIds, ...UNMATCHED_MESHES, ...PROP_MESH_IDS]) {
     if (!realMeshIds.has(meshId)) {
       throw new Error(`link-catalogue-meshes: "${meshId}" is not a real id in look-proof-pieces.js's own PIECES`);
     }
   }
-  // Every real L12 mesh must be classified somewhere (bound, unmatched, or
-  // prop) -- a new mesh added to PIECES later and never classified here
-  // would otherwise fall through silently rather than surfacing as a gap.
-  const classified = new Set([...Object.keys(MESH_BINDINGS), ...UNMATCHED_MESHES, ...PROP_MESH_IDS]);
+  // Every VARIANT_BINDINGS target must itself already be a real, bound
+  // catalogue entry -- a variant with no primary binding would be a mesh
+  // pool with nothing to be an ALTERNATE to.
+  for (const catalogueId of Object.keys(VARIANT_BINDINGS)) {
+    if (!Object.values(MESH_BINDINGS).includes(catalogueId)) {
+      throw new Error(`link-catalogue-meshes: VARIANT_BINDINGS names "${catalogueId}", which has no primary MESH_BINDINGS entry`);
+    }
+  }
+  // Every real L12 mesh must be classified somewhere (bound, a variant,
+  // unmatched, or prop) -- a new mesh added to PIECES later and never
+  // classified here would otherwise fall through silently rather than
+  // surfacing as a gap.
+  const classified = new Set([...Object.keys(MESH_BINDINGS), ...variantMeshIds, ...UNMATCHED_MESHES, ...PROP_MESH_IDS]);
   for (const p of PIECES) {
     if (!classified.has(p.id)) {
-      throw new Error(`link-catalogue-meshes: "${p.id}" is a real look-proof-pieces.js mesh not classified in MESH_BINDINGS, UNMATCHED_MESHES, or PROP_MESH_IDS -- classify it before running`);
+      throw new Error(`link-catalogue-meshes: "${p.id}" is a real look-proof-pieces.js mesh not classified in MESH_BINDINGS, VARIANT_BINDINGS, UNMATCHED_MESHES, or PROP_MESH_IDS -- classify it before running`);
     }
   }
 
@@ -132,9 +198,18 @@ function main() {
     glbByCatalogueId.set(catalogueId, glbByMeshId.get(meshId));
   }
 
-  const linked = catalogue.map((entry) => ({ ...entry, glb: glbByCatalogueId.get(entry.id) || null }));
+  const linked = catalogue.map((entry) => {
+    const { glbVariants: _stale, ...rest } = entry; // never carry a previous run's own value forward unrecomputed
+    const variantIds = VARIANT_BINDINGS[entry.id];
+    return {
+      ...rest,
+      glb: glbByCatalogueId.get(entry.id) || null,
+      ...(variantIds ? { glbVariants: variantIds.map((id) => glbByMeshId.get(id)) } : {}),
+    };
+  });
   writeFileSync(CATALOGUE_PATH, JSON.stringify(linked, null, 2) + "\n");
   console.log(`linked ${glbByCatalogueId.size} of ${catalogue.length} catalogue entries to a real L12 mesh`);
+  console.log(`${Object.keys(VARIANT_BINDINGS).length} of those carry a second real variant (CAT-3): ${Object.keys(VARIANT_BINDINGS).join(", ")}`);
   console.log(`${UNMATCHED_MESHES.length} L12 meshes have no matching entry (finding, not invented): ${UNMATCHED_MESHES.join(", ")}`);
   console.log(`${PROP_MESH_IDS.length} L12 meshes are scene dressing, deliberately not catalogue pieces: ${PROP_MESH_IDS.join(", ")}`);
 }

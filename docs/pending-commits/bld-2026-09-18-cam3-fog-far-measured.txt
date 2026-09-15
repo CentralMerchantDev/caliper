@@ -1,0 +1,85 @@
+CAM-3: the haze on the board camera, measured -- the near-plane
+hypothesis was tested and rejected; the real cause is uFogFar, not
+uFogNear.
+
+WHAT WAS WRONG: docs/briefs/BLD-2026-09-18.md CAM-3 (§4), CHECKLIST.md
+CAM-3. Mark on 30-board-scene-pass-fix3.png: "the buildings are
+extremely hazy, the details have been lost... the clarity has
+disappeared because of something overlaid... a gauze." Three prior fog
+retunes (density, colour) never touched it. The brief's own hypothesis,
+from reading the image directly: the fog's NEAR plane starting too
+close.
+
+VERIFY BEFORE CHANGING ANYTHING, per the brief's own explicit
+instruction and GRD-1's own precedent (UV retiling was a real, wrong
+lever, found only by measuring): reproduced the EXACT historical camera
+(14-board.png's own formula -- boardCenterX-70, 130, boardCenterZ-70,
+temporarily substituted into public/look-proof-scene.html, then
+reverted byte-identical) and computed real camera-to-surface distances
+against the CURRENT real geometry (FIX-1's own ~376m mega-tower-a, not
+the compressed heights `30` itself was rendered against, but the same
+underlying camera/fog mechanism). Near ground: ~130m from that camera
+-- already past uFogNear=90, and it read correctly in the render
+(sharp, grainy, matching Mark's own "ground under-blended" observation
+exactly). The near-plane hypothesis is REJECTED by this measurement:
+uFogNear was never the problem.
+
+THE REAL CAUSE, found the same way: the SAME tower's own real facade
+spans ~174m (base) to ~272m (top) from that camera -- the TOP is
+already past uFogFar=230 (full fog), the BASE sits at 60% blend. One
+continuous facade fading from 60% to 100% fog across its own real
+height is exactly "detail not blurred, but WASHED -- contrast lost,"
+Mark's own words. uFogFar=230 was tuned for HERO_MODE's own much
+smaller subjects (RB5's own comment: "~90" was HERO_MODE's own camera
+distance) and was never retuned when FIX-1 made BOARD_MODE's own real
+height range roughly 14x larger.
+
+VERIFIED THE FIX BY MEASUREMENT TOO, not assumed: rendered a
+controlled before/after against the SAME historical camera and the
+SAME real geometry, varying ONLY uFogFar (230 -> 500). The tower's own
+base/lower floors regained real colour and contrast; the ground
+(already correct) unchanged. Fixed via a real, measured, disclosed
+BOARD_MODE-only override on public/look-proof-scene.html's own material
+instance -- uFogNear is explicitly left untouched, since measurement
+found it was not the cause; widening it too would have been exactly the
+un-measured retune this item's own brief warns against repeating a
+fourth time. This is a DIFFERENT override from RC4's own rejected one
+(uFogNear=100/uFogFar=220 -- NARROWER than shared, unmeasured, judged
+hazier than 14-board.png on 25-board-scene-pass.png) -- this one is
+WIDER, and measured before being written.
+
+TESTS: test/lookProofScene.test.ts -- split the old FIX-3 test (RC4's
+own rejected pair stays forbidden; the removed "no caller-side uniform
+write" clause is now explicitly superseded by CAM-3's own real,
+measured one) and added 2 new GATE (CAM-3) tests: uFogFar is widened;
+uFogNear is explicitly left untouched (asserted as a real, checked
+absence, not merely undocumented). 98/98 pass. npx tsc --noEmit clean.
+Full suite: 1176 pass / 13 pre-existing unrelated fails, the same
+categories confirmed at CAM-2's own baseline, no new ones.
+
+MUTATED, ALL CAUGHT: node scripts/_mutcheck.mjs -- cam3-fogfar-must-
+stay-widened CAUGHT against a GREEN baseline. fix3-board-fog-override-
+must-stay-reverted (RC4's own rejected pair) re-anchored to the current
+real code -- its own original anchor text no longer existed once CAM-3's
+override sat between the two lines it used to match -- and re-confirmed
+CAUGHT. Source restored byte-identical both times.
+
+node scripts/interact-look-proof.mjs re-confirmed RC1's own click/drag/
+wheel flow unbroken by the fog change: "RC1 GATE: pass".
+
+MEASURED, RENDERED, LOOKED AT -- §5.5's own five lines: docs/look-proof-
+shots/47-cam3-fog-far-fixed.png (?eyeDolly=200&eyePitch=15, a
+genuinely far pulled-back view that exercises the fixed far plane,
+unlike CAM-2's own close-range evidence shots where the old bug never
+triggered). Both towers show real window bands, real shading, real
+material colour difference at a distance (~185-285m) that would have
+fully washed the taller one under the old uFogFar=230. Also refreshed
+(viewed directly, not silently regenerated): 44/45-cam2-eye-*.png
+(close-range, visually unchanged, well under even the old uFogFar) and
+46-cam2-eye-panout.png (?eyeDolly=60, far enough to cross the old
+boundary -- now shows MORE contrast than when CAM-2 was first
+committed, a real, positive side effect of this fix, not a silent
+regression to a previously-passing shot).
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012fvsDWLyvbN5Dj6csGYvbA

@@ -53,7 +53,7 @@ test("GATE (RC2): a refused entry (LOCKED) is shown on screen, not only logged -
 });
 
 test("GATE (RC2): a successful entry actually switches to a real per-area board render -- resolveBoardPieces against worldLayer's own boardFor(), never a hardcoded piece list", () => {
-  assert.match(SCENE_SRC, /import \{ resolveBoardPieces, rotateGeometryY, MODULE_SIZE_M \} from "\.\/board-renderer\.js"/, "the real board-renderer module is not imported");
+  assert.match(SCENE_SRC, /import \{ resolveBoardPieces, resolveGhost, resolveReadout, anchorForCell, rotateGeometryY, MODULE_SIZE_M \} from "\.\/board-renderer\.js"/, "the real board-renderer module is not imported");
   assert.match(SCENE_SRC, /const board = worldLayer\.boardFor\(areaId\)/, "enterBoardView does not read the real, resident board for the entered area");
   assert.match(SCENE_SRC, /const \{ resolved, skipped \} = resolveBoardPieces\(board, catalogueById, manifest\)/, "the entered board's pieces are not resolved via the real resolveBoardPieces");
 });
@@ -77,4 +77,136 @@ test("RC2: clicking is only wired to the overview's own pad meshes, gated to ove
 test("(synthetic) the vulnerability: a comment mentioning worldLayer.enter must not satisfy the checks above", () => {
   const commentOnly = stripSourceComments("// const result = worldLayer.enter(areaId, { loadBoard: loadBoardForArea }) used to be here\nconst m = {};\n");
   assert.doesNotMatch(commentOnly, /const result = worldLayer\.enter\(areaId, \{ loadBoard: loadBoardForArea \}\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
+});
+
+test("GATE (CAM-1): the overview's own board view passes each piece's real storeys to fitToFootprint -- FIX-1's real height, not the old default-capped path this page silently kept", () => {
+  assert.match(SCENE_SRC, /fitToFootprint\(geom, p\.footprint, p\.anchor, p\.storeys\)/, "buildBoardMesh's own fitToFootprint call does not pass p.storeys -- entering an area from the overview would still show the old, capped ~27m heights while look-proof-scene.html's own board shows FIX-1's real ~376m range, two pages silently disagreeing about the same catalogue data");
+});
+
+test("GATE (CAM-1, retired): CAM-1's own trig-framed formula is gone from this page too -- superseded by CAM-4 below (scoped from CAM-2/CAM-3's own findings: this exact function, measured, put a real tall piece at fogFactor=1.0, a complete fog-out worse than CAM-1's own original defect)", () => {
+  assert.doesNotMatch(SCENE_SRC, /const dist = Math\.max\(w, d\);/, "setBoardCamera's own distance is still driven only by the board's ground width/depth, never the real height of what is actually placed on it");
+  assert.doesNotMatch(SCENE_SRC, /const heightDist = \(targetY \* 1\.15\) \/ Math\.tan\(halfFovRad\);/, "CAM-1's own retired trig-based heightDist formula is still present");
+});
+
+// -------------------------------------------------- CAM-4: the eye-level camera, ported
+test("GATE (CAM-4): setBoardCamera takes the real resolved pieces (anchor/footprint/storeys), not a guessed max height, and finds the tallest one the same way CAM-2's own boardResolved.reduce does on look-proof-scene.html", () => {
+  assert.match(SCENE_SRC, /function setBoardCamera\(resolved\)/, "setBoardCamera does not take the real resolved pieces");
+  assert.match(SCENE_SRC, /const tallestPiece = resolved\.length\s*\n\s*\? resolved\.reduce\(\(a, b\) => \(b\.storeys \|\| 0\) > \(a\.storeys \|\| 0\) \? b : a, resolved\[0\]\)\s*\n\s*: null;/, "the tallest real piece is not found from the real resolved list");
+});
+
+test("GATE (CAM-4): buildBoardMesh exposes its own real resolved pieces on the mesh itself, so setBoardCamera never has to re-derive or guess them", () => {
+  assert.match(SCENE_SRC, /mesh\.userData\.resolved = resolved;/, "buildBoardMesh does not expose the real resolved pieces on the mesh");
+  assert.match(SCENE_SRC, /setBoardCamera\(mesh\.userData\.resolved\);/, "enterBoardView does not pass the real resolved pieces to setBoardCamera");
+});
+
+test("GATE (CAM-4): the FOV widens for the eye camera entering a board, and resets back on returning to the overview -- the overview's own top-down shot must not stay eye-camera-wide after leaving a board", () => {
+  assert.match(SCENE_SRC, /camera\.fov = 65;\s*\n\s*camera\.updateProjectionMatrix\(\);/, "setBoardCamera does not widen the FOV and update the projection matrix");
+  assert.match(SCENE_SRC, /camera\.fov = 45;\s*\n\s*camera\.updateProjectionMatrix\(\);/, "setOverviewCamera does not reset the FOV back and update the projection matrix");
+});
+
+test("GATE (CAM-4): the fog fix is ported too -- this page's own board view uses the SAME widened uFogFar CAM-3 measured for look-proof-scene.html, scoped so the overview's own separate pad/ground material is never touched", () => {
+  assert.match(SCENE_SRC, /material\.uniforms\.uFogFar\.value = 500;/, "the board view's own uFogFar is not widened past the shared 230");
+});
+
+test("GATE (CAM-4): drag-to-look and wheel-to-pan-out are wired here too, the SAME click-vs-drag gating CAM-2 already proved on look-proof-scene.html", () => {
+  assert.match(SCENE_SRC, /const DRAG_THRESHOLD_PX = 4;/, "no real drag-vs-click threshold exists");
+  assert.match(SCENE_SRC, /if \(Math\.abs\(dx\) > DRAG_THRESHOLD_PX \|\| Math\.abs\(dy\) > DRAG_THRESHOLD_PX\) dragState\.moved = true;/, "pointermove does not detect real drag movement past the threshold -- every held-button move, even zero-distance, would register as a drag");
+  assert.match(SCENE_SRC, /if \(wasDrag\) return;/, "pointerup does not skip placement for a real look-drag");
+  assert.match(SCENE_SRC, /renderer\.domElement\.addEventListener\("wheel", \(e\) => \{/, "no wheel listener exists for dolly");
+});
+
+test("(synthetic) the vulnerability: a comment mentioning eyeCameraFromState must not satisfy the checks above", () => {
+  const commentOnly = stripSourceComments("// function eyeCameraFromState(yawDeg, pitchDeg, dolly) used to be here\nconst m = {};\n");
+  assert.doesNotMatch(commentOnly, /function eyeCameraFromState\(yawDeg, pitchDeg, dolly\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
+});
+
+// =============================================================================
+// SHIP-1 (docs/briefs/BLD-2026-09-17.md §5) -- "one page, both sides: overview
+// -> area -> place -> author -> reload." Real clicks (hover, commit, remove,
+// cancel), the live readout, authoring, and a real reload action, proven for
+// real by scripts/interact-overview-scene.mjs (RC2/SHIP-1 GATE), not this
+// suite -- same split this file's own header already establishes for RC2.
+// =============================================================================
+
+test("GATE (SHIP-1/place): the real pointer-interaction.js and placement.js modules are imported -- not a second, hand-rolled hover/commit/cancel path", () => {
+  assert.match(SCENE_SRC, /import \{ createPlacementSession, loadBoard \} from "\.\/placement\.js"/, "the real placement session/loadBoard are not imported");
+  assert.match(SCENE_SRC, /import \{ cellFromWorldXZ, handleHover, handleClick, handleCancel \} from "\.\/pointer-interaction\.js"/, "the real pointer-interaction.js handlers are not imported");
+});
+
+test("GATE (SHIP-1/place): entering a board creates a real session over THAT area's own board, and place/author UI is only shown then", () => {
+  assert.match(SCENE_SRC, /session = createPlacementSession\(\{ board \}\)/, "enterBoardView does not create a real placement session over the entered board");
+  assert.match(SCENE_SRC, /document\.getElementById\("authorPanel"\)\.style\.display = "block"/, "the author panel is not shown on entering a board");
+  assert.match(SCENE_SRC, /document\.getElementById\("reloadButton"\)\.style\.display = "block"/, "the reload button is not shown on entering a board");
+});
+
+test("GATE (SHIP-1/place): pointer handlers are gated to board mode -- hover/click/cancel cannot even resolve while the overview is showing, the same structural (not merely re-checked) discipline RC2's own click-gating already uses for the overview pads", () => {
+  assert.match(SCENE_SRC, /renderer\.domElement\.addEventListener\("pointermove", \(e\) => \{\s*\n\s*if \(mode !== "board"\) return;/, "pointermove does not bail out of overview mode before resolving a cell");
+  assert.match(SCENE_SRC, /if \(e\.button !== 0 \|\| mode !== "board"\) return;/, "the board pointerdown handler does not bail out of overview mode");
+});
+
+test("GATE (SHIP-1/place): Escape cancels a live ghost FIRST, only leaving the board when nothing is being previewed -- RC2's own 'Escape leaves the board' gate must still hold exactly when it always did (no hover having happened yet)", () => {
+  assert.match(SCENE_SRC, /if \(session && session\.getGhost\(\)\) \{\s*\n\s*handleCancel\(session\);/, "Escape does not cancel a live ghost before leaving the board");
+});
+
+test("(synthetic) the vulnerability: a comment mentioning createPlacementSession must not satisfy the checks above", () => {
+  const commentOnly = stripSourceComments("// session = createPlacementSession({ board }) used to be here\nconst m = {};\n");
+  assert.doesNotMatch(commentOnly, /session = createPlacementSession\(\{ board \}\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
+});
+
+// -------------------------------------------------- SHIP-1: the live readout
+
+test("GATE (RDO-1/SHIP-1): the real board-renderer readout functions and a real, unmodified ScoringModule namespace import back the live label -- never a second, hand-computed number", () => {
+  assert.match(SCENE_SRC, /resolveGhost, resolveReadout, anchorForCell/, "resolveGhost/resolveReadout/anchorForCell are not imported from the real board-renderer.js");
+  assert.match(SCENE_SRC, /import \* as ScoringModule from "\.\/scoring\.js"/, "ScoringModule is not imported as a namespace -- a named import would crash this page for as long as S4 is absent, the same reason RB3 kept it a namespace import");
+  assert.match(SCENE_SRC, /function buildReadoutLabelTexture\(current, ifPlaced\)/, "buildReadoutLabelTexture is missing -- there is no on-screen label to draw");
+});
+
+test("GATE (RDO-1/SHIP-1): the readout is recomputed on EVERY hover, from the real resolveReadout against the real board -- 'that number, changing as the cursor moves, IS the reason one cell beats another', not a value computed once", () => {
+  assert.match(SCENE_SRC, /readoutResolved = resolveReadout\(ScoringModule, worldLayer\.boardFor\(currentAreaId\), catalogueById, ghost\.anchorCell, currentBrushTypeId, 0\)/, "updateGhostAndReadout does not call the real resolveReadout against the real, currently-active board");
+});
+
+// -------------------------------------------------- SHIP-1: author
+
+test("GATE (SHIP-1/author): catalogue-registry.js is loaded via a DYNAMIC import, never a static top-level one -- FOUND BY RUNNING THIS PAGE: a static import crashes the ENTIRE page's module graph the moment the browser tries to resolve the migration script's own node:fs/node:url/node:path (docs/CROSS-LANE-REQUESTS.md #4)", () => {
+  assert.doesNotMatch(SCENE_SRC, /^import \{ createCatalogueRegistry \} from "\.\/catalogue-registry\.js";/m, "catalogue-registry.js is imported statically -- this would crash the whole page in every real browser");
+  assert.match(SCENE_SRC, /const mod = await import\("\.\/catalogue-registry\.js"\);/, "catalogue-registry.js is not loaded via a dynamic import");
+  assert.match(SCENE_SRC, /mod\.createCatalogueRegistry\(shippedCatalogueById\)/, "the real createCatalogueRegistry is not constructed from the dynamically-loaded module");
+});
+
+test("GATE (SHIP-1/author): a failed registry load degrades the AUTHOR step honestly -- reported via a real, checkable error, not a silent no-op, while the rest of the page keeps working", () => {
+  assert.match(SCENE_SRC, /catch \(e\) \{\s*\n\s*registryLoadError = e;/, "a registry load failure is not caught and recorded");
+  assert.match(SCENE_SRC, /if \(!registry\) \{\s*\n\s*return \{ ok: false, errors: \[\{ rule: "registry-unavailable"/, "addRenderableAuthoredEntry does not report a real, specific registry-unavailable refusal when the registry failed to load");
+});
+
+test("GATE (SHIP-1/author): a successfully authored entry gets a real, already-shipped glb as a caller-side rendering stand-in -- read from the real shipped catalogue, never invented -- and B1's own 'the board cannot tell the difference' is exercised through the SAME addAuthoredEntry every headless test already proves, not a second implementation", () => {
+  assert.match(SCENE_SRC, /const AUTHORED_STANDIN_GLB = shippedCatalogueById\["house-a"\]\.glb;/, "the authored-entry stand-in glb is not read from a real shipped catalogue entry");
+  assert.match(SCENE_SRC, /const result = registry\.addAuthoredEntry\(fields\);/, "addRenderableAuthoredEntry does not call the real, unmodified addAuthoredEntry");
+});
+
+test("GATE (SHIP-1/author): a successfully authored piece is immediately selected as the current brush -- author, then place it, the SAME session/ghost/commit path as any shipped brush", () => {
+  assert.match(SCENE_SRC, /currentBrushTypeId = result\.entry\.id;/, "authoring does not select the new piece as the current brush");
+});
+
+test("(synthetic) the vulnerability: a comment mentioning addRenderableAuthoredEntry must not satisfy the checks above", () => {
+  const commentOnly = stripSourceComments("// function addRenderableAuthoredEntry(fields) used to be here\nconst m = {};\n");
+  assert.doesNotMatch(commentOnly, /function addRenderableAuthoredEntry\(fields\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
+});
+
+// -------------------------------------------------- SHIP-1: reload
+
+test("GATE (SHIP-1/reload): a real button click serializes the REAL session (RB4's own proven placement.js round trip) and persists it, keyed per area -- not a ?reload=1 query-param demo", () => {
+  assert.match(SCENE_SRC, /document\.getElementById\("reloadButton"\)\.addEventListener\("click", \(\) => \{/, "the reload button has no real click handler");
+  assert.match(SCENE_SRC, /const save = session\.serialize\(\{ seed: "ship1-demo", generatorParams: null \}\);/, "the reload handler does not call the real session.serialize()");
+  assert.match(SCENE_SRC, /localStorage\.setItem\(SAVE_KEY_PREFIX \+ currentAreaId, JSON\.stringify\(save\)\);/, "the save is not persisted, keyed by the real current area id");
+  assert.match(SCENE_SRC, /location\.reload\(\);/, "the reload handler does not trigger a REAL page navigation reload");
+});
+
+test("GATE (SHIP-1/reload): loadBoardForArea replays a real save via the real loadBoard() when one exists for this area, instead of re-deriving AREA_DEMO_PLACEMENTS", () => {
+  assert.match(SCENE_SRC, /const \{ board, failures \} = loadBoard\(\{ width: AREA_BOARD_WIDTH, height: AREA_BOARD_HEIGHT, catalogue: catalogueById \}, save\);/, "loadBoardForArea does not call the real loadBoard() against a saved session");
+  assert.match(SCENE_SRC, /if \(failures\.length\) console\.log\(`SHIP1-RELOAD-FAILURES/, "a failed replay is not surfaced -- C2.5's own contract (never silently drop a placement that fails to re-apply)");
+});
+
+test("(synthetic) the vulnerability: a comment mentioning SHIP1-SAVE must not satisfy the checks above", () => {
+  const commentOnly = stripSourceComments('// console.log(`SHIP1-SAVE area=${currentAreaId} placements=${save.placements.length}`) used to be here\nconst m = {};\n');
+  assert.doesNotMatch(commentOnly, /console\.log\(`SHIP1-SAVE area=\$\{currentAreaId\} placements=\$\{save\.placements\.length\}`\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
 });

@@ -1,0 +1,82 @@
+FIX-4: the readout's evidence was empty because the console transcript that
+carries the real number was never captured -- not an HTML-overlay bug.
+
+WHAT WAS WRONG: docs/briefs/BLD-2026-09-16.md FIX-4 (PLAN.md 3.4,
+CHECKLIST.md FIX-4): 26-readout-real-numbers.png shows a cursor marker and
+no number anywhere in frame. The brief's own hypothesis was benign --
+toDataURL() reads the WebGL canvas, so an HTML text overlay would not be
+captured, which would make the number real and the evidence merely
+incomplete.
+
+RE-GROUNDED, NOT TAKEN ON FAITH: read public/look-proof-scene.html's own
+RB3/RC5 comment (search "the value readout's own visual marker") before
+touching anything. There is no HTML overlay, and no on-screen text of any
+kind -- the readout was always designed as a coloured 3D marker
+(available=blue / unavailable=grey) plus a console.log line
+("READOUT-STATE cell=... current=... ifPlaced=..."), verbatim: "a
+screenshot paired with the console line is what this run's own brief asked
+be shown to Mark, not a second, invented visual encoding of the same
+numbers." That is a real, deliberate design decision, not a bug -- building
+on-screen text now would fight it for no reason.
+
+THE ACTUAL DEFECT: scripts/shoot-look-proof.mjs printed console lines to
+the terminal and discarded them the moment the process exited. 26's own
+commit (2f98a4c) hand-transcribes THREE cells' worth of numbers into prose
+(7,4 -> 2.32; 2,6 -> -0.43; 20,14 -> 0) but only ONE was ever screenshotted,
+and none of the three numbers exist anywhere a later reader could check them
+against -- the "pairing" the design relies on was never actually preserved.
+Same shape as the blank-canvas-reporting-draw-calls:-1 defect this lane
+caught itself: green on every measure taken, unverifiable on the one thing
+that mattered.
+
+THE FIX: scripts/shoot-look-proof.mjs now captures EVERY console line (not
+just error lines, which is all the pre-existing `errors` array kept), and
+on a successful render writes them to a companion `<outName>.console.txt`
+beside the PNG. This is the durable half of "screenshot paired with the
+console line" -- from now on every look-proof shot carries its own
+transcript in the repository, not just in a terminal that closes.
+
+EVIDENCE, FRESH TODAY, NOT REUSED FROM 2f98a4c's OWN CLAIM: rendered the
+same three cells that commit's message named, to check whether they still
+hold and to actually produce the missing artefacts:
+- docs/look-proof-shots/31-readout-cell-7-4.png +
+  31-readout-cell-7-4.console.txt: READOUT-STATE cell=7,4 available=true
+  current=0 ifPlaced=2.3207944168063896 (a real house beside tower-base-
+  6x6-a's landmark adjacency bonus).
+- docs/look-proof-shots/32-readout-cell-2-6.png +
+  32-readout-cell-2-6.console.txt: READOUT-STATE cell=2,6 available=true
+  current=0 ifPlaced=-0.4308869380063768 (residential dilution, a real
+  negative, not clamped).
+- docs/look-proof-shots/33-readout-cell-20-14.png +
+  33-readout-cell-20-14.console.txt: READOUT-STATE cell=20,14
+  available=true current=0 ifPlaced=0 (far from every piece).
+Looked at all three PNGs directly (rule://background-promotion-evidence):
+the blue marker sits at a visibly different board position in each,
+confirming the cell argument is real and wired through, not a fixed shot
+relabelled three times.
+
+SAID PLAINLY, NOT QUIETLY PAPERED OVER: the PNG alone still cannot show a
+number -- it shows the marker's position and its available/unavailable
+colour only. "The number changes as the cursor moves" (RC5's own gate) is
+now checkable, but only by opening the paired .console.txt alongside the
+.png, never from the image by itself. If a future item wants the number
+literally IN the frame, that is a real, separate, larger change (on-screen
+text rendering) that the RB3/RC5 comment explicitly chose not to build --
+a decision for whoever owns that call next, not something this fix silently
+reversed.
+
+TESTS: test/shootLookProof.test.ts (new) -- two GATE assertions against
+scripts/shoot-look-proof.mjs's own source (every console line captured; a
+companion file written on success) plus the standard comment-stripped
+synthetic-vulnerability check. node test/run.mjs test/shootLookProof.test.ts:
+3/3 pass. npx tsc --noEmit: clean.
+
+MUTATED, BOTH CAUGHT: node scripts/_mutcheck.mjs test/shootLookProof.test.ts
+scripts/shoot-look-proof.mjs test/mutations.json --
+fix4-shoot-look-proof-must-capture-all-console-lines (drops the capture)
+and fix4-shoot-look-proof-must-write-console-companion-file (drops the
+write) both CAUGHT against a GREEN baseline; source file restored byte-
+identical after the run. Both entries added to test/mutations.json.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012fvsDWLyvbN5Dj6csGYvbA

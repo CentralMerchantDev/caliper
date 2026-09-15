@@ -61,9 +61,23 @@ const browser = await chromium.launch({
          "--ignore-gpu-blocklist", "--enable-webgl", "--no-sandbox"],
 });
 const errors = [];
+// FIX-4 (docs/briefs/BLD-2026-09-16.md) -- 26-readout-real-numbers.png
+// showed a cursor marker and no number anywhere in frame, because there
+// never was one: look-proof-scene.html's own RB3/RC5 design renders the
+// readout as a coloured 3D marker plus a console.log line
+// ("READOUT-STATE cell=... current=... ifPlaced=..."), deliberately, not
+// on-screen text -- the screenshot was only ever meant to be HALF the
+// evidence, paired with the console line. That pairing was never actually
+// preserved: this script printed console lines to the terminal and threw
+// them away the moment the process exited, so the "real numbers" in
+// 26's own commit message were a hand transcript, not something anyone
+// could check against a committed artefact afterward. Captured here
+// (every line, not just errors) and written to a companion file below.
+const consoleLines = [];
 const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
 page.on("pageerror", (e) => errors.push("PAGEERROR " + e.message));
 page.on("console", (m) => {
+  consoleLines.push(m.text());
   if (m.type() === "error") errors.push("CONSOLE " + m.text());
   else console.log("  " + m.text());
 });
@@ -85,6 +99,12 @@ const renderInfo = await page.evaluate(() => {
 if (ready === true) {
   const dataUrl = await page.evaluate(() => document.querySelector("canvas").toDataURL("image/png"));
   fs.writeFileSync(path.join(OUT_DIR, outName + ".png"), Buffer.from(dataUrl.split(",")[1], "base64"));
+  // FIX-4 -- the durable half of "a screenshot paired with the console
+  // line": every captured console line, written next to the PNG it
+  // belongs to, so a claim like "the readout shows 2.32 here" is
+  // something a later reader can open and check, not something they have
+  // to trust a commit message transcribed correctly.
+  fs.writeFileSync(path.join(OUT_DIR, outName + ".console.txt"), consoleLines.join("\n") + "\n");
   console.log(`wrote ${outName}.png in ${((Date.now() - t0) / 1000).toFixed(1)}s` + (renderInfo ? ` [calls: ${renderInfo.calls}, tris: ${renderInfo.triangles}]` : ""));
 } else {
   console.log(`NOT WRITTEN -- window.__ready was "${ready}"`);

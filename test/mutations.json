@@ -987,6 +987,214 @@
       "expect": "RULE 10: three of four provenance fields present is caught, naming the one missing"
     },
     {
+      "id": "fix3-board-fog-override-must-stay-reverted",
+      "guards": "FIX-3 (docs/briefs/BLD-2026-09-16.md): reintroduces RC4's rejected board-camera-only fog override (uFogNear=100, uFogFar=220) that judged 25-board-scene-pass.png hazier than 14-board.png. CAM-3's own real uFogFar=500 override lives alongside this now -- this mutation checks specifically that RC4's own narrower, rejected pair does not come back too. Find text updated to anchor on CAM-3's own real override line (the material-construction anchor this mutation originally used no longer matches, now that CAM-3's own comment/code sits between it and the mesh line).",
+      "file": "public/look-proof-scene.html",
+      "find": "if (BOARD_MODE) material.uniforms.uFogFar.value = 500;",
+      "replace": "if (BOARD_MODE) { material.uniforms.uFogNear.value = 100; material.uniforms.uFogFar.value = 220; }",
+      "expect": "GATE (FIX-3): RC4's own rejected, unmeasured board-camera fog override"
+    },
+    {
+      "id": "fix3-grd1-board-paving-radius-must-stay-retired",
+      "guards": "FIX-3/GRD-1: BOARD_PAVING_RADIUS (RC4's rejected 20, FIX-3's retuned 10) is reintroduced -- GRD-1 retired the island-paving-radius design entirely in favour of paving the whole plot; its return would mean the radius-based design is back, live or not.",
+      "file": "public/look-proof-scene.html",
+      "find": "const PAVING_RADIUS = 6; // metres -- a plausible street-level paved apron, wider than DECAL_RADIUS's own tight contact-shadow scale",
+      "replace": "const PAVING_RADIUS = 6; // metres -- a plausible street-level paved apron, wider than DECAL_RADIUS's own tight contact-shadow scale\nconst BOARD_PAVING_RADIUS = 10;",
+      "expect": "GATE (FIX-3/GRD-1): the board's own island-paving radius (RC4's rejected 20, FIX-3's retuned 10) is retired, not reintroduced -- GRD-1 replaced it with full-plot paving; RB5's own HERO_MODE PAVING_RADIUS is untouched"
+    },
+    {
+      "id": "fix4-shoot-look-proof-must-capture-all-console-lines",
+      "guards": "FIX-4 (docs/briefs/BLD-2026-09-16.md): the readout's real number only ever exists as a console.log line -- filtering the captured transcript down to error lines only throws away the one thing that would prove a number is real.",
+      "file": "scripts/shoot-look-proof.mjs",
+      "find": "  consoleLines.push(m.text());",
+      "replace": "  // MUTATED: console lines no longer captured.",
+      "expect": "GATE (FIX-4): every console line is captured, not filtered down to errors alone -- the readout's real number only ever exists as a console.log line, so dropping non-error lines throws away the one thing that would prove it"
+    },
+    {
+      "id": "fix4-shoot-look-proof-must-write-console-companion-file",
+      "guards": "FIX-4 (docs/briefs/BLD-2026-09-16.md): 26-readout-real-numbers.png's own commit message hand-transcribed three cells' worth of numbers into prose, unverifiable from any committed artefact -- removes the companion transcript file, restoring that gap.",
+      "file": "scripts/shoot-look-proof.mjs",
+      "find": "  fs.writeFileSync(path.join(OUT_DIR, outName + \".console.txt\"), consoleLines.join(\"\\n\") + \"\\n\");",
+      "replace": "  // MUTATED: companion console transcript no longer written.",
+      "expect": "GATE (FIX-4): a successful render writes the captured console transcript to a companion file beside the PNG -- a screenshot alone is canvas pixels and cannot show a number; this is the durable half of the 'screenshot paired with the console line' pairing look-proof-scene.html's own design already relies on"
+    },
+    {
+      "id": "cat2-street-cross-must-stay-corrected",
+      "guards": "CAT-2 (docs/briefs/BLD-2026-09-16.md): reverts street-cross's own mesh binding back to road-crossing.glb -- a STRAIGHT road with a crosswalk painted on it, confirmed by rendering, not a junction at all -- undoing the correction to the real 4-way, road-crossroad.glb.",
+      "file": "public/look-proof-pieces.js",
+      "find": "{ id: \"street-crossing\", glb: \"vendor/kits/kenney-city-kit-roads/road-crossroad.glb\", footprint: [16, 16], layer: 1 },",
+      "replace": "{ id: \"street-crossing\", glb: \"vendor/kits/kenney-city-kit-roads/road-crossing.glb\", footprint: [16, 16], layer: 1 },",
+      "expect": "GATE (BO7A): the real catalogue's own glb fields exactly match link-catalogue-meshes.mjs's disclosed MESH_BINDINGS table -- no drift, nothing silently dropped or added"
+    },
+    {
+      "id": "cat2-lane-cross-binding-must-stay-classified",
+      "guards": "CAT-2: drops one of the 26 new MESH_BINDINGS entries -- BO7A's own classification gate must catch a real L12 mesh (lane-cross) silently falling out of {MESH_BINDINGS, VARIANT_BINDINGS, UNMATCHED_MESHES, PROP_MESH_IDS}, not just a glb-value mismatch.",
+      "file": "scripts/link-catalogue-meshes.mjs",
+      "find": "  \"lane-cross\": \"lane-cross\",",
+      "replace": "",
+      "expect": "GATE (BO7A/CAT-3): every real L12 mesh is accounted for exactly once -- bound, a disclosed variant, a disclosed finding, or a disclosed prop, never silently unclassified"
+    },
+    {
+      "id": "cat2-pieces-count-must-stay-46-not-drift",
+      "guards": "CAT-2: removes one of the 26 new PIECES entries (lane-straight) -- the total-count gate must catch PIECES silently drifting away from 46, not just individual id checks.",
+      "file": "public/look-proof-pieces.js",
+      "find": "{ id: \"lane-straight\", glb: \"vendor/kits/kenney-city-kit-roads/road-straight.glb\", footprint: [8, 8], layer: 1 },",
+      "replace": "",
+      "expect": "CAT-2 (docs/briefs/BLD-2026-09-16.md): PIECES is 46, not still 20 and not creeping toward 200 -- L12's original 20 plus 26 dedicated, per-tier catalogue road bindings, a real and checkable total"
+    },
+    {
+      "id": "cat3-variant-index-must-stay-real-hash",
+      "guards": "CAT-3 (docs/specs/PLAN.md 5.2): collapses the deterministic variant index to always 0 -- every placement of a variant-bearing typeId would resolve to the SAME mesh, exactly the 'two towers of the same footprint are the same tower' complaint this item exists to fix.",
+      "file": "public/board-renderer.js",
+      "find": "  return (hash >>> 0) % poolSize;",
+      "replace": "  return 0;",
+      "expect": "GATE (CAT-3): 'two towers of the same footprint should not be the same tower' -- many real placements of the SAME variant-bearing typeId are not all the SAME variant"
+    },
+    {
+      "id": "cat3-glb-variants-must-stay-consulted",
+      "guards": "CAT-3: glbForPiece stops consulting glbVariants at all -- every placement falls back to entry.glb regardless of a real variant pool being present. Trivially still 'in the pool' (entry.glb is always element 0), so the test that actually catches this is the variety-across-placements one, not the pool-membership one.",
+      "file": "public/board-renderer.js",
+      "find": "  if (!entry.glbVariants || entry.glbVariants.length === 0) return entry.glb;",
+      "replace": "  return entry.glb;",
+      "expect": "GATE (CAT-3): 'two towers of the same footprint should not be the same tower' -- many real placements of the SAME variant-bearing typeId are not all the SAME variant"
+    },
+    {
+      "id": "cat3-tower-variant-binding-must-stay-classified",
+      "guards": "CAT-3: drops tower-base-6x6-a's own VARIANT_BINDINGS entry -- BO7A/CAT-3's own classification gate must catch tower-base-6x6-alt silently falling out of all four classification tables.",
+      "file": "scripts/link-catalogue-meshes.mjs",
+      "find": "  \"tower-base-6x6-a\": [\"tower-base-6x6-alt\"],",
+      "replace": "",
+      "expect": "GATE (BO7A/CAT-3): every real L12 mesh is accounted for exactly once -- bound, a disclosed variant, a disclosed finding, or a disclosed prop, never silently unclassified"
+    },
+    {
+      "id": "cat4-camera-must-stay-off-diagonal",
+      "guards": "CAT-4 (docs/briefs/BLD-2026-09-16.md): restores the rejected 45-degree diagonal isometric camera (equal X and Z offset) -- Mark's own verdict on this exact angle was 'a diagonal strip in a field of black'.",
+      "file": "public/catalogue-contact-sheet.html",
+      "find": "camera.position.set(centerX, dist * 0.55, centerZ - dist);",
+      "replace": "camera.position.set(centerX - dist, dist * 0.55, centerZ - dist);",
+      "expect": "GATE (CAT-4): the camera looks along ONE axis (front-on), not a 45-degree diagonal isometric offset -- CAT-2's own diagonal camera read as 'a diagonal strip in a field of black' (Mark, docs/briefs/BLD-2026-09-16.md), because an equal X/Z offset onto a rectangular grid photographs as a rotated diamond, not a grid"
+    },
+    {
+      "id": "fix1-storeys-must-still-drive-height-when-real",
+      "guards": "FIX-1 (docs/briefs/BLD-2026-09-16.md, PLAN.md 3.1): disables the real-storeys branch entirely -- every piece would fall back to the old capped footprint-average height regardless of whether real storeys data is available.",
+      "file": "public/look-proof-pieces.js",
+      "find": "const hasRealStoreys = typeof storeys === \"number\" && Number.isFinite(storeys) && storeys > 0;",
+      "replace": "const hasRealStoreys = false;",
+      "expect": "GATE (FIX-1): fitToFootprint WITH a real storeys argument scales height by storeys directly, uncapped -- never the footprint-average path"
+    },
+    {
+      "id": "fix1-default-path-must-stay-capped",
+      "guards": "FIX-1: removes the cap from the DEFAULT (no-storeys) path -- HERO_MODE's own already-judged render (no storeys, calls fitToFootprint the old way) would move.",
+      "file": "public/look-proof-pieces.js",
+      "find": "const sy = hasRealStoreys ? storeys : Math.min((sx + sz) / 2, 6);",
+      "replace": "const sy = hasRealStoreys ? storeys : (sx + sz) / 2;",
+      "expect": "fitToFootprint, no storeys argument (the default): height is UNCHANGED, still (sx+sz)/2 capped at 6 -- HERO_MODE's own already-judged render calls it this way and must not move"
+    },
+    {
+      "id": "fix1-board-renderer-must-still-read-storeys",
+      "guards": "FIX-1: resolveBoardPieces stops reading storeys from the real catalogue entry -- every board piece would silently fall back to capped, footprint-only height again.",
+      "file": "public/board-renderer.js",
+      "find": "storeys: entry.storeys,",
+      "replace": "storeys: undefined,",
+      "expect": "GATE (FIX-1): resolveBoardPieces reads storeys directly from the real catalogue entry -- never invented, never computed here"
+    },
+    {
+      "id": "cam2-trig-formula-must-stay-retired",
+      "guards": "CAM-1/CAM-2: CAM-1's own retired trig-based distance formula (dist = targetY*1.15/tan(halfFovRad)) is reintroduced -- Mark's own verdict retired it (36-board-cam1-real-range.png, 'two flat slabs against a gradient'); its return would mean the failed whole-range-in-one-shot approach is back, live or not. Was cam1-board-camera-must-stay-height-aware (targeted the SAME formula's now-deleted find text) -- went INCONCLUSIVE (find matched 0 times) once CAM-2 removed it; renamed and retargeted (adds the retired line back, rather than mutating an existing one, since there is no longer a live line to mutate INTO it) rather than left stale, same pattern GRD-1's own fix3-board-paving-radius retirement used.",
+      "file": "public/look-proof-scene.html",
+      "find": "const dollyClamped = Math.max(0, dolly);",
+      "replace": "const dollyClamped = Math.max(0, dolly);\n      const dist = (targetY * 1.15) / Math.tan(halfFovRad); // 15% margin so the tallest piece's own top/base are not touching the frame edge",
+      "expect": "GATE (CAM-2): CAM-1's own trig-framed, whole-range-in-one-shot formula is gone -- Mark's own verdict (36-board-cam1-real-range.png, 'two flat slabs against a gradient') retired it, not silently kept alongside the real fix"
+    },
+    {
+      "id": "cam1-overview-storeys-must-stay-wired",
+      "guards": "CAM-1: overview-scene.html's own buildBoardMesh stops passing p.storeys to fitToFootprint -- entering an area would silently show the old, capped height while look-proof-scene.html's own board shows the real one.",
+      "file": "public/overview-scene.html",
+      "find": "fitToFootprint(geom, p.footprint, p.anchor, p.storeys);",
+      "replace": "fitToFootprint(geom, p.footprint, p.anchor);",
+      "expect": "GATE (CAM-1): the overview's own board view passes each piece's real storeys to fitToFootprint -- FIX-1's real height, not the old default-capped path this page silently kept"
+    },
+    {
+      "id": "cam4-overview-setboardcamera-must-take-resolved",
+      "guards": "CAM-1/CAM-4: overview-scene.html's own setBoardCamera stops taking the real resolved pieces. Was cam1-overview-camera-must-stay-height-aware (targeted the retired maxHeight-param signature) -- went INCONCLUSIVE (find matched 0 times) once CAM-4 replaced it with the real eye camera's own resolved-pieces signature; renamed and retargeted rather than left stale, same pattern GRD-1's own fix3-board-paving-radius retirement used.",
+      "file": "public/overview-scene.html",
+      "find": "function setBoardCamera(resolved) {",
+      "replace": "function setBoardCamera() {",
+      "expect": "GATE (CAM-4): setBoardCamera takes the real resolved pieces"
+    },
+    {
+      "id": "rdo1-label-texture-must-stay-drawn",
+      "guards": "RDO-1 (docs/briefs/BLD-2026-09-17.md): buildReadoutLabelTexture stops drawing the ifPlaced value -- the readout would show only 'current', silently dropping the SECOND number S4's own phase-gate clause requires ('the value the piece WOULD HAVE there').",
+      "file": "public/look-proof-scene.html",
+      "find": "ctx.fillText(`ifPlaced ${ifPlaced.toFixed(2)}`, 24, 176);",
+      "replace": "",
+      "expect": "GATE (RDO-1): a real text texture is drawn from readoutResolved's own current/ifPlaced numbers -- §S4's own phase-gate clause ('the ghost shows the target cell's current value and the value the piece would have there... that number, changing as the cursor moves, IS the reason one cell beats another') is not met by a console line alone"
+    },
+    {
+      "id": "rdo1-label-sprite-must-stay-gated-on-available",
+      "guards": "RDO-1: the label sprite renders even when readoutResolved.available is false -- a guessed/absent number would be drawn as though it were real.",
+      "file": "public/look-proof-scene.html",
+      "find": "if (readoutResolved.available) {\n      const labelTex = buildReadoutLabelTexture(readoutResolved.current, readoutResolved.ifPlaced);",
+      "replace": "if (true) {\n      const labelTex = buildReadoutLabelTexture(readoutResolved.current, readoutResolved.ifPlaced);",
+      "expect": "GATE (RDO-1): the label is a Sprite (always faces the camera, legible from any angle), added to the scene ONLY when readoutResolved is real and available -- never drawn for a guessed or unavailable value"
+    },
+    {
+      "id": "grd1-board-ground-must-stay-fully-paved",
+      "guards": "GRD-1 (docs/briefs/BLD-2026-09-17.md): BOARD_MODE's near ground reverts to the old island-paving-radius design (addGroundLayerAttribute with a radius) instead of paving the whole plot -- the exact 'desert with patches' defect this gate replaced.",
+      "file": "public/look-proof-scene.html",
+      "find": "const groundGeom = BOARD_MODE\n    ? addLayerAttribute(groundGeomRaw, pavedLayerIndex)\n    : addGroundLayerAttribute(groundGeomRaw, [...PIECES, ...boardFootprintsForDecal], pavedLayerIndex, GROUND.layer, PAVING_RADIUS);",
+      "replace": "const groundGeom = addGroundLayerAttribute(groundGeomRaw, [...PIECES, ...boardFootprintsForDecal], pavedLayerIndex, GROUND.layer, PAVING_RADIUS);",
+      "expect": "GATE (GRD-1): BOARD_MODE's own near ground is paved in FULL (a real plot, not islands of paving around each footprint) -- addGroundLayerAttribute's own radius design already measured as 'desert with patches'"
+    },
+    {
+      "id": "grd1-board-kerb-ring-must-stay-wired",
+      "guards": "GRD-1: the board's own perimeter kerb ring is dropped (an empty array instead of the real buildBoardKerbRing call) -- the paved plot would fade into earth with no marked edge, and the interactive rebuild path would silently lose it too.",
+      "file": "public/look-proof-scene.html",
+      "find": "const boardKerbGeoms = BOARD_MODE ? buildBoardKerbRing(GROUND, GROUND.layer) : [];",
+      "replace": "const boardKerbGeoms = [];",
+      "expect": "GATE (GRD-1): the board's own plot has a real perimeter kerb ring marking where the paved plot ends and untouched earth begins, built via buildBoardKerbRing and merged into the SAME one mesh as everything else"
+    },
+    {
+      "id": "ship1-place-escape-must-cancel-ghost-before-leaving",
+      "guards": "SHIP-1: Escape stops cancelling a live ghost first -- a player mid-preview would lose their whole board view by accident instead of just dropping what they were about to place.",
+      "file": "public/overview-scene.html",
+      "find": "if (session && session.getGhost()) {",
+      "replace": "if (false) {",
+      "expect": "GATE (SHIP-1/place): Escape cancels a live ghost FIRST, only leaving the board when nothing is being previewed"
+    },
+    {
+      "id": "ship1-author-registry-unavailable-check-must-stay",
+      "guards": "SHIP-1: addRenderableAuthoredEntry stops checking whether the registry actually loaded -- a real browser (docs/CROSS-LANE-REQUESTS.md #4) would throw calling registry.addAuthoredEntry on a null registry instead of refusing with a real, reported reason.",
+      "file": "public/overview-scene.html",
+      "find": "if (!registry) {\n      return { ok: false, errors: [{ rule: \"registry-unavailable\", message: `catalogue-registry.js could not be loaded in this browser: ${registryLoadError ? registryLoadError.message : \"unknown error\"}` }] };\n    }",
+      "replace": "",
+      "expect": "GATE (SHIP-1/author): a failed registry load degrades the AUTHOR step honestly"
+    },
+    {
+      "id": "ship1-reload-must-stay-real-loadboard",
+      "guards": "SHIP-1: loadBoardForArea stops replaying a saved session through the real loadBoard() when one exists -- a reload would silently re-derive AREA_DEMO_PLACEMENTS instead of proving RB4's own round trip actually ran.",
+      "file": "public/overview-scene.html",
+      "find": "const { board, failures } = loadBoard({ width: AREA_BOARD_WIDTH, height: AREA_BOARD_HEIGHT, catalogue: catalogueById }, save);",
+      "replace": "const { board, failures } = { board: createAreaBoard({ width: AREA_BOARD_WIDTH, height: AREA_BOARD_HEIGHT, catalogue: catalogueById }), failures: [] };",
+      "expect": "GATE (SHIP-1/reload): loadBoardForArea replays a real save via the real loadBoard()"
+    },
+    {
+      "id": "ship5-deploy-commit-check-must-stay-real",
+      "guards": "SHIP-5 (docs/briefs/BLD-2026-09-17.md): deployCommitClaimMismatch stops reporting a mismatch -- a stale #deploy-commit span would silently pass, exactly the 'manifest nothing checks is decoration' defect this item exists to close.",
+      "file": "src/generatedClaimChecks.ts",
+      "find": "export function deployCommitClaimMismatch(claimedCommit: string, generatedShortCommit: string): string | null {\n  if (!claimedCommit) return \"#deploy-commit is missing from the page\";\n  if (claimedCommit !== generatedShortCommit) {\n    return `page says ${claimedCommit}, generated manifest says ${generatedShortCommit} -- run node scripts/gen-deploy-manifest.mjs`;\n  }\n  return null;\n}",
+      "replace": "export function deployCommitClaimMismatch(claimedCommit: string, generatedShortCommit: string): string | null {\n  return null;\n}",
+      "expect": "(synthetic) a deliberately staled deploy-commit claim is named, not silently absorbed"
+    },
+    {
+      "id": "ship5-deploy-commit-span-must-stay-on-page",
+      "guards": "SHIP-5: the #deploy-commit span id is dropped from public/overview-scene.html -- the manifest would render as a bare, unlabelled value nothing could check, and the whole point of naming this a MANIFEST rather than decoration.",
+      "file": "public/overview-scene.html",
+      "find": "<span id=\"deploy-commit\">",
+      "replace": "<span id=\"deploy-commit-renamed\">",
+      "expect": "GATE (SHIP-5): the page's own #deploy-version/#deploy-commit/#deploy-build-time are not stale against the last real generation"
+    },
+    {
       "id": "ter1-sea-level-rise-must-actually-flood",
       "guards": "TER-1 (RESEARCH.md T1): heightAt must subtract SEA_LEVEL_RISE_M from the pre-flood landform, or the whole 'generate one landmass, then flood it' method never floods anything. Removes the subtraction. The land-fraction sanity test alone did NOT catch this -- watched SURVIVE first (the base landform's own edges already dip negative from erosion/detail noise, so land fraction stays 'sane' even unflooded) -- so a direct relationship test (heightAt === preFloodHeightAt - SEA_LEVEL_RISE_M) was added specifically to catch it.",
       "file": "public/terrain-field.js",
@@ -1017,6 +1225,62 @@
       "find": "  return (nearWater ? TERRAIN_WATER_BONUS : 0) + maxRelief * TERRAIN_SLOPE_PENALTY_PER_M;",
       "replace": "  return 0 + maxRelief * TERRAIN_SLOPE_PENALTY_PER_M;",
       "expect": "GATE (TER-5): water adjacency alone raises a score -- isolated from slope with two DIRECTLY-CONTROLLED, perfectly flat cells (real terrainContribution(), board state authored to remove every other variable)"
+    },
+    {
+      "id": "cam2-pitch-clamp-must-stay-real",
+      "guards": "CAM-2 (docs/briefs/BLD-2026-09-18.md): the pitch clamp is widened past 80deg -- 'look up' could flip past straight overhead into an disorienting, unintended view Mark's own words never asked for.",
+      "file": "public/look-proof-scene.html",
+      "find": "const pitch = (Math.max(-10, Math.min(80, pitchDeg)) * Math.PI) / 180;",
+      "replace": "const pitch = (Math.max(-10, Math.min(179, pitchDeg)) * Math.PI) / 180;",
+      "expect": "GATE (CAM-2): yaw/pitch/dolly are read from the URL for the static single-shot pipeline, and pitch is clamped so a look-up cannot flip past straight overhead"
+    },
+    {
+      "id": "cam2-dolly-must-stay-coupled-to-elevation",
+      "guards": "CAM-2: panning out stops also lifting the camera -- 'when you pan out, that's where you'll see the height' would no longer hold; panning out would move the camera back without revealing any more height.",
+      "file": "public/look-proof-scene.html",
+      "find": ".add(new THREE.Vector3(0, dollyClamped * 0.3, 0));",
+      "replace": ".add(new THREE.Vector3(0, 0, 0));",
+      "expect": "GATE (CAM-2): panning out ALSO lifts the camera -- 'when you pan out, that's where you'll see the height' is a real coupling between dolly and elevation, not two independent controls"
+    },
+    {
+      "id": "cam2-drag-must-stay-gated-on-real-movement",
+      "guards": "CAM-2: the drag-vs-click threshold is removed -- every click would also register as a zero-distance 'drag', and (depending on evaluation order) could suppress real placement clicks or, conversely, a real drag could misfire as a placement click.",
+      "file": "public/look-proof-scene.html",
+      "find": "if (Math.abs(dx) > DRAG_THRESHOLD_PX || Math.abs(dy) > DRAG_THRESHOLD_PX) dragState.moved = true;",
+      "replace": "dragState.moved = true;",
+      "expect": "GATE (CAM-2): drag-to-look is a real gesture, told apart from RC1's own click-to-place by real pixel movement, not layered onto the same event -- a held button with no movement, released, is still a click"
+    },
+    {
+      "id": "cam3-fogfar-must-stay-widened",
+      "guards": "CAM-3 (docs/briefs/BLD-2026-09-18.md): BOARD_MODE's own widened uFogFar reverts to the shared 230 -- measured (not guessed) to fully fog out FIX-1's own real ~376m tall pieces well below their own top, the exact 'objects over-hazed, ground under-blended' defect Mark named on 30-board-scene-pass-fix3.png.",
+      "file": "public/look-proof-scene.html",
+      "find": "if (BOARD_MODE) material.uniforms.uFogFar.value = 500;",
+      "replace": "",
+      "expect": "GATE (CAM-3): BOARD_MODE's own uFogFar is widened past the shared 230"
+    },
+    {
+      "id": "cam4-fogfar-must-stay-widened",
+      "guards": "CAM-4: overview-scene.html's own widened uFogFar reverts to the shared 230 -- CAM-3's own measurement, taken directly against this page's real camera formula (downtown/mega-tower-a, ~502m), found this produces fogFactor=1.0, complete fog-out, worse than CAM-1's own original defect.",
+      "file": "public/overview-scene.html",
+      "find": "material.uniforms.uFogFar.value = 500;",
+      "replace": "",
+      "expect": "GATE (CAM-4): the fog fix is ported too"
+    },
+    {
+      "id": "cam4-tallest-piece-must-stay-real",
+      "guards": "CAM-4: the eye anchor stops finding the tallest piece from the real resolved list -- a hardcoded or arbitrary anchor could silently disagree with which piece is actually tallest once an area's own real pieces change.",
+      "file": "public/overview-scene.html",
+      "find": "const tallestPiece = resolved.length\n      ? resolved.reduce((a, b) => (b.storeys || 0) > (a.storeys || 0) ? b : a, resolved[0])\n      : null;",
+      "replace": "const tallestPiece = resolved[0] || null;",
+      "expect": "GATE (CAM-4): setBoardCamera takes the real resolved pieces"
+    },
+    {
+      "id": "cam4-drag-must-stay-gated-on-real-movement",
+      "guards": "CAM-4: the drag-vs-click threshold is removed -- every click would also register as a zero-distance 'drag', the same real regression class CAM-2's own equivalent mutation guards against on look-proof-scene.html.",
+      "file": "public/overview-scene.html",
+      "find": "if (Math.abs(dx) > DRAG_THRESHOLD_PX || Math.abs(dy) > DRAG_THRESHOLD_PX) dragState.moved = true;",
+      "replace": "dragState.moved = true;",
+      "expect": "GATE (CAM-4): drag-to-look and wheel-to-pan-out are wired here too"
     }
   ]
 }

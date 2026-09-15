@@ -1,0 +1,110 @@
+FIX-1: the 6x height cap, removed -- real storeys drive real height, no
+invented floor-to-floor constant.
+
+WHAT WAS WRONG: docs/briefs/BLD-2026-09-16.md (from a later turn: "FIX-2
+landed hours ago on origin/main, storeys field exists -- take FIX-1"),
+PLAN.md 3.1, CHECKLIST.md FIX-1. mega-tower-a rendered at 26.88m -- 4.48m
+(building-skyscraper-b.glb's own real native height, measured directly)
+times a hard-coded 6x cap on fitToFootprint's own vertical scale, added
+during L12 "to stop odd scaling against smaller pieces." Mark's ruling: a
+mega-tower is 100+ storeys and the range descends from there; that range
+IS the game.
+
+RE-GROUNDED BEFORE TOUCHING ANYTHING: origin/main was merged first (this
+run's own prior commit, 3b6c842) to bring in CLI's FIX-2 -- a real,
+disclosed `storeys` field on every catalogue entry, its own header
+explicit about why it does NOT invent a floor-to-floor metres constant
+(RESEARCH.md R11 forbids exactly that fabrication) and instead composes
+proportion/massing/footprint into a real-proportions SCALE, verified
+against Mark's own Toronto reference (84:4 = 21:1, close to his own
+~24:1). That verification cites PLAN.md §3.1 directly -- this fix's own
+governing section -- and the brief's own §1 says so in as many words:
+"FIX-1 needs a real storey count... so a piece's height follows from its
+own data." storeys was built specifically to drive this fix.
+
+MEASURED FIRST, NOT GUESSED: removing the cap alone (raw uncapped
+footprint-average) was tried and computed before committing to anything --
+mega-tower-a would reach only ~105m, an 8:1 ratio against a small house,
+nowhere near Mark's own ~24:1 reference, and it leaves storeys completely
+unused despite FIX-2 having been built and verified specifically to serve
+this fix. Rejected in favour of wiring storeys in directly.
+
+THE FIX (public/look-proof-pieces.js): fitToFootprint takes an OPTIONAL
+5th argument, `storeys`. Real (a positive finite number) -> height =
+storeys directly, uncapped -- two already-real, already-sourced numbers
+multiplied (the mesh's own native height, the catalogue's own storeys),
+never an invented constant. Absent (the default) -> UNCHANGED, byte-for-
+byte, from before this fix: (sx+sz)/2 capped at 6. Deliberate, not a
+leftover -- HERO_MODE's own already-judged static PIECES render (this
+file's own demo composition, no catalogue, no storeys) calls this
+function the same way it always has and must not move a single pixel,
+the same "already-judged look untouched" discipline FIX-3/RC4 already
+established for the board camera's own fog.
+
+WIRED (public/board-renderer.js, public/look-proof-scene.html, public/
+catalogue-contact-sheet.html): resolveBoardPieces reads `storeys` directly
+from the real catalogue entry (never computed here) into its own resolved
+descriptor. Both BOARD_MODE fitToFootprint call sites (the initial build
+and RC1's own click-driven rebuild) and the catalogue contact sheet's own
+call now pass it. HERO_MODE's own call site is untouched.
+
+TESTS: test/lookProofPieces.test.ts (new) -- fitToFootprint's own real
+behaviour, both paths, using real THREE geometry (no GPU needed): the
+default path byte-identical to before; storeys=84 produces height=168 on
+a 2m-native box (2*84, no cap); a real order-of-magnitude jump on
+tower-base-6x6-a's own real numbers; X/Z footprint fit unaffected by
+storeys either way; storeys=0/NaN/undefined/negative all fall back to the
+default path, never a zero-height or NaN piece. test/boardRenderer.test.ts
+-- resolveBoardPieces reads storeys from the real entry; an entry with no
+storeys field resolves to undefined, not a guessed number. node test/
+run.mjs test/lookProofPieces.test.ts test/boardRenderer.test.ts
+test/lookProofScene.test.ts test/catalogueContactSheet.test.ts
+test/catalogueValidator.test.ts test/shootLookProof.test.ts: 187/187 pass.
+npx tsc --noEmit: clean.
+
+MUTATED, ALL THREE CAUGHT: node scripts/_mutcheck.mjs -- fix1-storeys-
+must-still-drive-height-when-real (disables the real-storeys branch),
+fix1-default-path-must-stay-capped (removes the cap from the default
+path), fix1-board-renderer-must-still-read-storeys (stops reading storeys
+from the entry) all CAUGHT against a GREEN baseline, source files
+restored byte-identical.
+
+MEASURED, RENDERED, LOOKED AT -- the gate, verbatim: "a shot showing the
+real range, and the measured height of the tallest piece stated in
+metres." A dedicated shot, not the 38-piece contact sheet -- tried making
+the sheet also carry this range and it failed both ways attempted: an
+elevated angled camera with a hand-tuned distance still clipped the
+tower's own top; a distance driven off the real merged boundingBox height
+fixed the clipping but shrank all 37 other pieces to unreadable. Reverted
+the contact sheet to CAT-4's own camera unchanged; mega-tower-a and
+tower-base-6x6-a clip its top as a real, disclosed consequence (docs/
+look-proof-shots/27-catalogue-contact-sheet.png, regenerated). The real
+evidence instead: docs/look-proof-shots/34-height-range.png (small-
+house-a next to mega-tower-a, a level camera framed with real trigonometry
+off the real merged boundingBox so the tallest piece's own full height
+fits with margin) + its own companion .console.txt -- FIX-4's own
+established "screenshot paired with the console line" pattern, since
+canvas.toDataURL() cannot capture DOM labels: "small-house-a real
+rendered height = 4.57m (storeys=4)", "mega-tower-a real rendered height
+= 376.32m (storeys=84)". 82:1 -- Mark's own Toronto reference is ~24:1;
+this run's own real numbers overshoot it, said plainly rather than tuned
+to land closer.
+
+A SEPARATE, REAL FINDING, NOT FIXED HERE: rendered the actual board
+(docs/look-proof-shots/35-board-fix1-real-height.png, ?board=1, the SAME
+camera 14/25/30-board*.png already use) and looked at it -- the board
+camera itself, tuned for the old ~22-27m capped range, is now completely
+inadequate. tower-base-6x6-a (237m real) and mega-tower-a (376m real,
+placed 7 cells apart per BOARD_DEMO_PLACEMENTS) fill the entire frame
+from a camera position built for buildings a tenth their size; the house
+and street tile are barely visible in a corner. This is the honest,
+correct consequence of a real fix, not a bug in it -- the board camera's
+own retune is real, necessary follow-up work, disclosed rather than
+silently left for whoever looks at the board next to discover on their
+own. Both temporary verification pages used to measure real native mesh
+dimensions (a bounding-box check) and to build the dedicated height-range
+shot were removed after use -- nothing persists from either except this
+record and the two committed PNG+console.txt pairs.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012fvsDWLyvbN5Dj6csGYvbA

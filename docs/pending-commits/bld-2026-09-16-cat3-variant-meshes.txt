@@ -1,0 +1,119 @@
+CAT-3: two towers of the same footprint are not the same tower -- a real
+second mesh per placement, using zero new assets.
+
+WHAT WAS ASKED: docs/briefs/BLD-2026-09-16.md CAT-3 (PLAN.md 5.2,
+CHECKLIST.md CAT-3), Mark, 2026-09-15, verbatim: "a city builder is about
+diversity in design, shape, size and height -- within the plot limits --
+as in real buildings in a real city. Two towers of the same footprint
+should not be the same tower." The brief's own instruction: "§R2's
+variation numbers are far lower than instinct suggests -- read them
+before deciding how many variants."
+
+READ FIRST, PER THAT INSTRUCTION: docs/specs/REBUILD-PLAN.md R2/C1.5.
+Firewatch shipped 23 unique trees for an entire game; Eastshade's own
+advice is "start with ONE variant and test it in a real scene before
+building a second"; Bethesda's own GDC talk: players react more to
+repeated PROPS than repeated ARCHITECTURE. C1.5's own disclosed list of
+"free variation that costs no new mesh": vertex-colour masks, re-propping
+the same mesh, position/rotation on the lot, mirroring, scale/rotation
+jitter -- explicitly NOT "commission more meshes."
+
+THE TARGET, CHOSEN FROM THAT BUDGET: BO7A's own UNMATCHED_MESHES table
+(scripts/link-catalogue-meshes.mjs, unchanged in spirit since BO7A) had
+already benched three real, already-vendored, already-CC0-licensed meshes
+-- tower-base-6x6-alt, midrise-4x4-alt, commercial-2x2-alt -- excluded
+ONLY because "only ONE catalogue slot of that footprint+category exists,
+already taken by another L12 mesh." That is a SLOT problem, not an ASSET
+problem: CAT-2's own "no new entries, no changed footprint or category"
+still holds (CLI's own fields untouched), but nothing stops a single
+catalogue entry from carrying a SECOND real mesh, chosen per placement
+rather than per slot. Zero new assets, matching R2's own "far lower than
+instinct" -- the opposite of what CAT-3 could have become (commissioning
+new meshes for every footprint tier).
+
+THE MECHANISM (public/board-renderer.js):
+- `glbVariants`, a NEW, ADDITIVE, OPTIONAL catalogue field alongside the
+  existing `glb` -- absent on 47 of 50 entries, so every entry without it
+  behaves exactly as before this item (test-proven: "an entry with NO
+  glbVariants resolves glb to entry.glb, byte-identical to before this
+  feature existed").
+- `deterministicVariantIndex(seed, poolSize)`: FNV-1a hash of
+  `${typeId}:${id}` mod pool size -- never Math.random(). The SAME real
+  placement always resolves to the SAME mesh across re-renders (a rebuild
+  after an unrelated click must not make an already-placed piece appear
+  to silently change shape), while two DIFFERENT placements of the same
+  typeId are very likely to land on different pool indices.
+- `glbForPiece(entry, piece)`: returns `entry.glb` unchanged when
+  `glbVariants` is absent or empty; otherwise indexes into
+  `[entry.glb, ...entry.glbVariants]`.
+- Wired into `resolveBoardPieces`'s own existing glb/layer resolution --
+  no change to its own returned SHAPE, only which real path `glb` holds
+  for a variant-bearing typeId.
+
+THE DATA (scripts/link-catalogue-meshes.mjs, data/catalogue.json):
+- `VARIANT_BINDINGS`: `{ "tower-base-6x6-a": ["tower-base-6x6-alt"],
+  "apartment-block-a": ["midrise-4x4-alt"], "corner-shop-a":
+  ["commercial-2x2-alt"] }`. `UNMATCHED_MESHES` is now empty -- these
+  three were its own entire contents.
+- `main()` writes `entry.glbVariants` (an array of real glb paths,
+  resolved the same way `glb` already is) for exactly these three
+  entries, additive, never overwriting `glb` itself. Idempotent, like the
+  rest of this script -- a stale `glbVariants` from a prior run is always
+  dropped and recomputed fresh, never silently carried forward.
+- node scripts/link-catalogue-meshes.mjs: "linked 38 of 50 catalogue
+  entries" (unchanged from CAT-2) "3 of those carry a second real variant
+  (CAT-3): tower-base-6x6-a, apartment-block-a, corner-shop-a" "0 L12
+  meshes have no matching entry" (was 3, all three now variants).
+
+TESTS: test/boardRenderer.test.ts -- 4 new tests: no-glbVariants is
+unchanged; a variant-bearing entry resolves into its own real pool;
+resolution is stable across repeated calls for the SAME placement; and
+the literal gate, "many real placements of the SAME variant-bearing
+typeId are not all the SAME variant" (30 real board.place() calls, both
+real meshes must appear). test/catalogueValidator.test.ts -- BO7A's own
+classification gate extended to a 4th table (VARIANT_BINDINGS), a new
+glbVariants-matches-VARIANT_BINDINGS gate (mirrors the existing glb-match
+gate), a VARIANT_BINDINGS-targets-a-real-binding gate, and the existing
+idempotence test updated to also recompute glbVariants. node test/run.mjs
+test/boardRenderer.test.ts test/catalogueValidator.test.ts
+test/lookProofScene.test.ts: 163/163 pass. npx tsc --noEmit: clean.
+
+MUTATED, ALL FOUR CAUGHT: node scripts/_mutcheck.mjs test/boardRenderer.
+test.ts public/board-renderer.js test/mutations.json --
+cat3-variant-index-must-stay-real-hash (collapses the index to always 0)
+and cat3-glb-variants-must-stay-consulted (glbForPiece always returns
+entry.glb) both CAUGHT. node scripts/_mutcheck.mjs test/catalogueValidator
+.test.ts scripts/link-catalogue-meshes.mjs test/mutations.json --
+cat3-tower-variant-binding-must-stay-classified (drops the tower's own
+VARIANT_BINDINGS entry) CAUGHT. A pre-existing CAT-2 mutation
+(cat2-lane-cross-binding-must-stay-classified) went INCONCLUSIVE first --
+its own `expect` string named the classification test's OLD title, which
+this item's own edit renamed (BO7A -> BO7A/CAT-3); fixed to name the real,
+current title and re-CAUGHT. All against a GREEN baseline; source files
+restored byte-identical after each run.
+
+MEASURED, RENDERED, LOOKED AT: 5 real tower-base-6x6-a placements on a
+real board (createAreaBoard + resolveBoardPieces, a temporary verification
+page removed after use, per rule://background-promotion-evidence -- open
+the file and look at it). Console: "VARIANTS: building-sample-tower-d.glb,
+building-sample-tower-c.glb, building-sample-tower-d.glb, building-
+sample-tower-c.glb, building-sample-tower-d.glb" -- real alternation.
+Opened the render directly: two visually distinct tower silhouettes (a
+taller, plainer tower vs a shorter one with a green balcony band), not a
+label-only difference. node scripts/shoot-catalogue-contact-sheet.mjs
+afterward: "bound=38 total=50", draw calls: 1 -- unchanged, since the
+variant meshes were already part of the same vendored kit's own array-
+texture layer.
+
+STATED PLAINLY, NOT SILENTLY LEFT: the CAT-2 clone-duplicate road pieces
+(street-t and lane-street-t share one mesh at one footprint; similarly
+avenue-t/street-avenue-t, highway-t/avenue-highway-t, and several
+straight-reusing "transition" entries) are a real, separate "variety
+within a footprint class" gap, visible on the contact sheet itself -- not
+addressed here. R2's own "far lower than instinct" argues against a
+same-session second wave of new meshes to fix it; the cheap, C1.5-approved
+fix (a fixed alternate rotation per clone, free, no new asset) is a real
+follow-up, not force-fit into this item alongside the tower work above.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012fvsDWLyvbN5Dj6csGYvbA
