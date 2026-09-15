@@ -13,6 +13,20 @@
 // thing, commit a small checkable SUMMARY of what it proved. This is the
 // check that the summary and the manifest still agree -- so an id added to
 // test/mutations.json without ever being run is caught here, not assumed.
+//
+// WHICH SCOPE COUNTS AS "CAUGHT" -- STATED, NOT LEFT IN SOMEONE'S HEAD
+// (FIX-6, PLAN.md §3.6). A result can be recorded under `baselineScope`
+// "full-suite" (scripts/mutate.mjs -- the whole suite was green before the
+// mutation) or "scoped:<testFile>" (scripts/_mutcheck.mjs -- only that one
+// test file was checked green first). THIS GATE ACCEPTS EITHER as a valid
+// CAUGHT for the "every control has been shown to catch something" claim --
+// both are a real, watched red-then-caught observation of the SAME
+// mutation against the SAME control; a scoped baseline is a narrower
+// guarantee (nothing else in the suite was re-checked), not a weaker one
+// for the specific thing it measured. What this gate does NOT accept,
+// regardless of scope: SURVIVED, INCONCLUSIVE, or a CAUGHT row with no
+// recorded scope at all -- rule://published-claims applies to which scope a
+// claim rests on exactly as it does to the claim itself.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -48,6 +62,23 @@ test("every mutation in the manifest has a committed, checkable CAUGHT result", 
     `these controls have a recorded result that is NOT CAUGHT -- a control that survives its own ` +
     `mutation, or whose mutation could not be applied, is not a control: ${notCaught.join(", ")}`,
   );
+});
+
+test("GATE (FIX-6): every RECORDED baseline scope is a real one -- \"full-suite\" or \"scoped:<testFile>\", never a third, undocumented shape", () => {
+  // Not "every CAUGHT result has a scope" -- baselineScope did not exist
+  // before FIX-6, and 86 of today's 88 CAUGHT rows predate it. Same
+  // disclosed-gap treatment this file already gives measuredAt/method
+  // ("null for rows recorded before PART 7b/E2"), not a new gate that
+  // demands re-running every pre-FIX-6 control just to backfill a field.
+  // What IS checked, unconditionally: nothing has ever written a THIRD kind
+  // of scope value -- scripts/mutate-results.mjs's two real callers
+  // (scripts/mutate.mjs, scripts/_mutcheck.mjs) are the only writers this
+  // format has, and only they get to say what a scope string looks like.
+  const scoped = summary.mutations.filter((m: { baselineScope?: string | null }) => m.baselineScope);
+  const bogus = scoped
+    .filter((m: { baselineScope: string }) => m.baselineScope !== "full-suite" && !m.baselineScope.startsWith("scoped:"))
+    .map((m: { id: string; baselineScope: string }) => `${m.id} (${m.baselineScope})`);
+  assert.deepEqual(bogus, [], `baselineScope value(s) that are neither "full-suite" nor "scoped:<testFile>": ${bogus.join(", ")}`);
 });
 
 test("the summary is not stale against the manifest it claims to cover", () => {

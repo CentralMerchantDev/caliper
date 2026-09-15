@@ -62,6 +62,7 @@ import { filterPending, baselineIsFresh } from "./mutate-resume.mjs";
 import { MARKER, markerFileMatches, acquireLock, releaseLock, sha } from "./mutate-lock.mjs";
 import { unexpectedFailures } from "./expected-red.mjs";
 import { extractTestTitles } from "./extract-test-titles.mjs";
+import { RESULTS_PATH, loadResults, saveResults, recordResult } from "./mutate-results.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const MANIFEST = join(ROOT, "test", "mutations.json");
@@ -76,21 +77,10 @@ const MANIFEST = join(ROOT, "test", "mutations.json");
 // assume it gets that in one sitting.
 //
 // This is written after EVERY mutation, not at the end -- gitignored, since
-// it is a progress file, not a project artefact.
-const RESULTS_PATH = join(ROOT, "test", ".mutate-results.json");
-
-function loadResults() {
-  if (!existsSync(RESULTS_PATH)) return { results: [], baseline: null };
-  try {
-    return JSON.parse(readFileSync(RESULTS_PATH, "utf8"));
-  } catch {
-    return { results: [], baseline: null };
-  }
-}
-
-function saveResults(state) {
-  writeFileSync(RESULTS_PATH, JSON.stringify(state, null, 2));
-}
+// it is a progress file, not a project artefact. RESULTS_PATH/loadResults/
+// saveResults now live in scripts/mutate-results.mjs (FIX-6, PLAN.md §3.6),
+// the SAME module scripts/_mutcheck.mjs writes through -- one recorder, two
+// runners, so the format cannot drift between them.
 
 function gitStatusString() {
   try {
@@ -500,12 +490,20 @@ for (const mut of mutations) {
   // summary). Added here, going forward, rather than backfilled for rows
   // that never recorded them -- a guessed date would be worse than an absent
   // one.
-  resumeState.results.push({
+  // recordResult (scripts/mutate-results.mjs, FIX-6): upserts by id and
+  // saves immediately -- the SAME write path scripts/_mutcheck.mjs now uses,
+  // so a stale row from a scoped run and a fresh full-suite one can never
+  // both survive under the same id.
+  recordResult(resumeState, {
     ...mut, ...r,
     measuredAt: new Date().toISOString().slice(0, 10),
     method: `mutate.mjs ${opts.all ? "--all" : opts.id ? `--id ${opts.id}` : "--file/--find/--replace"}`,
+    // FIX-6 (PLAN.md §3.6): this tool's own baseline is the WHOLE suite, per
+    // mutation -- the strongest scope, and the one distinguishing field a
+    // shared recorder needs so a scoped scripts/_mutcheck.mjs CAUGHT is never
+    // confused for this one.
+    baselineScope: "full-suite",
   });
-  saveResults(resumeState);
   console.log(r.status + (r.why ? `  -- ${r.why}` : ""));
 }
 

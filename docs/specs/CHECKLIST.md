@@ -85,7 +85,7 @@ resolve a conflict by taking both sides' ticks for their own ids.
     shut. Expect the sweep to open it.
     Gate: every remaining entry names a file that exists. State how many were
     removed and how many of the seven failures cleared as a result.
-[ ] FIX-6 (CLI) One recorder, two runners — PLAN.md 3.6
+[x] FIX-6 (CLI) One recorder, two runners — PLAN.md 3.6
     Mark's ruling: both tools work properly, or do not keep both.
     Extract the results writer into a shared module both `mutate.mjs` and
     `_mutcheck.mjs` call, with a field recording the BASELINE SCOPE each result
@@ -95,6 +95,18 @@ resolve a conflict by taking both sides' ticks for their own ids.
     Gate: a `_mutcheck.mjs` run produces a recorded, citable result, and
     `mutationEvidence.test.ts` states which scope it accepts for a published
     claim rather than leaving that in someone's head.
+    Done: `scripts/mutate-results.mjs` (loadResults/saveResults/recordResult,
+    upsert by id) shared by both tools; both stamp `baselineScope`
+    ("full-suite" / "scoped:<testFile>"). Real `_mutcheck.mjs` run recorded
+    2 CAUGHT rows into test/.mutate-results.json — confirmed on disk, not
+    just console output. `mutationEvidence.test.ts` states explicitly (both
+    scopes accepted for CAUGHT; no third, undocumented scope shape ever).
+    3 failures cleared this item (9 -> 8): the summary-staleness test now
+    passes on a freshly regenerated `mutationSummary.generated.json`.
+    Still red, disclosed rather than silently left: "every mutation has a
+    CAUGHT result" — 50 of 138 manifest ids have never been run under any
+    scope; running them all needs the whole suite green first (mutate.mjs
+    refuses otherwise) and is SHIP-3's job, not this one's.
 
 ---
 

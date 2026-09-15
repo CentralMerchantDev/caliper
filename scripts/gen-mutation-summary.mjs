@@ -2,11 +2,18 @@
 //
 // PART 7b/E2 (docs/WORLD-BUILD-PLAN.md): test/.mutate-results.json -- the
 // only record that every control in test/mutations.json has actually been
-// RUN, not just written -- is gitignored, on purpose (scripts/mutate.mjs's
-// own comment calls it "a progress file, not a project artefact": it is
-// written after every single mutation so a killed run loses at most one
-// result, and committing that churn would make every local run dirty the
-// tree for no reason).
+// RUN, not just written -- is gitignored, on purpose (scripts/mutate-
+// results.mjs's own comment calls it "a progress file, not a project
+// artefact": it is written after every single mutation so a killed run
+// loses at most one result, and committing that churn would make every
+// local run dirty the tree for no reason).
+//
+// FIX-6 (PLAN.md §3.6): test/.mutate-results.json is now written by EITHER
+// scripts/mutate.mjs (a full-suite baseline per mutation) or scripts/
+// _mutcheck.mjs (scoped to one test file), through the one shared writer in
+// scripts/mutate-results.mjs -- so a row's `baselineScope` field says which,
+// and this generator passes it straight through rather than collapsing the
+// distinction.
 //
 // The consequence nobody had named until now: a fresh clone of this repo
 // gets 0 of 80 rows of evidence for the one claim this project's mutation
@@ -56,7 +63,12 @@ const entries = manifest.map((m) => {
   // full re-run that adds them going forward. Recorded as null here rather
   // than guessed, backdated, or silently omitted -- an absent field says
   // "not captured", which is true; a fabricated one would not be.
-  return { id: r.id, status: r.status, measuredAt: r.measuredAt ?? null, method: r.method ?? null };
+  //
+  // baselineScope (FIX-6, PLAN.md §3.6): "full-suite" (scripts/mutate.mjs) or
+  // "scoped:<testFile>" (scripts/_mutcheck.mjs) -- null for any row recorded
+  // before this fix existed, same "absent means not captured" rule as
+  // measuredAt/method above.
+  return { id: r.id, status: r.status, measuredAt: r.measuredAt ?? null, method: r.method ?? null, baselineScope: r.baselineScope ?? null };
 });
 
 const payload = {

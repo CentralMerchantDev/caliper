@@ -1,0 +1,90 @@
+FIX-6 (PLAN.md §3.6, docs/briefs/CLI-2026-09-16.md item 2): one recorder,
+two runners for the mutation tooling. Mark's ruling: both tools work
+properly, or this project does not keep both.
+
+WHAT WAS WRONG
+
+`scripts/mutate.mjs` runs a full-suite baseline per mutation and was the
+ONLY thing that wrote `test/.mutate-results.json` -- the file
+`scripts/gen-mutation-summary.mjs` reads to produce the committed
+`test/mutationSummary.generated.json`, the sole evidence this project's
+central mutation claim rests on. `scripts/_mutcheck.mjs` is scoped to one
+test file, faster, and had verified every S/C/U-item's own mutations for
+weeks -- and every one of those results was thrown away the moment the
+process exited, because it only ever printed to the console. Two tools, one
+of which recorded nothing.
+
+WHAT WAS DONE
+
+1. scripts/mutate-results.mjs (new): `loadResults`/`saveResults` extracted
+   verbatim from scripts/mutate.mjs, plus a new `recordResult(state, entry)`
+   that upserts by `entry.id` (replaces an existing row rather than
+   duplicating it) and persists immediately -- the same crash-safety
+   discipline mutate.mjs already had ("a kill must cost one mutation, never
+   the whole run"), now shared rather than mutate.mjs's alone.
+
+2. Both tools call it now:
+   - scripts/mutate.mjs imports RESULTS_PATH/loadResults/saveResults/
+     recordResult from the shared module instead of defining its own copies;
+     every recorded row gets `baselineScope: "full-suite"`.
+   - scripts/_mutcheck.mjs imports loadResults/recordResult and now records
+     EVERY outcome (CAUGHT, SURVIVED, and both INCONCLUSIVE shapes -- a bad
+     `find` count, an edit that did not land) into the SAME
+     test/.mutate-results.json, with `baselineScope: "scoped:<testFile>"`.
+
+3. scripts/gen-mutation-summary.mjs passes `baselineScope` through into
+   test/mutationSummary.generated.json (null for rows recorded before this
+   fix existed, same "absent means not captured" treatment already given to
+   measuredAt/method).
+
+4. test/mutationEvidence.test.ts states explicitly which scope it accepts
+   for a "CAUGHT" claim (CHECKLIST.md's own wording: "rather than leaving
+   that in someone's head") -- BOTH "full-suite" and any "scoped:<testFile>"
+   count, since both are a real, watched red-then-caught observation of the
+   same mutation against the same control; a scoped baseline is a narrower
+   guarantee, not a weaker one for the specific thing it measured. A new
+   gate checks that no THIRD, undocumented scope shape is ever written --
+   not "every CAUGHT names a scope" (86 of today's 88 CAUGHT rows predate
+   this fix and would need re-running just to backfill a field neither
+   mutate.mjs nor _mutcheck.mjs could have written before now; the disclosed-
+   gap treatment already established for measuredAt/method applies here too,
+   not a fresh gate demanding free backfill work).
+
+5. test/mutateResults.test.ts (new, 7 tests): the shared writer proven
+   directly against a scratch path -- round-trips, upserts by id (a second
+   recording of the same id replaces the row, proven not to duplicate), a
+   crash-safety check (recordResult persists to DISK, read back independent
+   of the in-memory state), and a scoped + full-suite row for different ids
+   coexisting with their own scope intact.
+
+VERIFIED FOR REAL, NOT JUST BY UNIT TEST: ran
+`node scripts/_mutcheck.mjs test/catalogueValidator.test.ts
+scripts/migrate-catalogue-s2-fields.mjs test/mutations.json` (the same
+command FIX-2 used to prove its own two mutations CAUGHT) and read
+test/.mutate-results.json back off disk afterward -- both rows are there,
+each carrying `"baselineScope": "scoped:test/catalogueValidator.test.ts"`
+and a real `failing` array, not a placeholder. Then regenerated
+test/mutationSummary.generated.json for real: 88 of 138 CAUGHT, 0 SURVIVED,
+0 INCONCLUSIVE, 50 never run under the current (FIX-5-pruned) manifest.
+
+`npx tsc --noEmit` clean. `node test/run.mjs`: pass 754 (was 745), fail 8
+(was 9) -- "the summary is not stale against the manifest it claims to
+cover" now passes against the freshly regenerated, real summary file.
+
+WHAT IS STILL OPEN
+
+- "every mutation in the manifest has a committed, checkable CAUGHT result"
+  remains red: 50 of 138 ids have never been run under either tool. Running
+  them all is SHIP-3's job ("the mutation manifest complete over the real
+  entries"), not this one's -- and `scripts/mutate.mjs` refuses to even
+  attempt a full-suite pass while ANY test is red (it printed "THE SUITE IS
+  ALREADY RED: 8 failing before any mutation" when tried), which includes
+  failures with nothing to do with mutation tooling (ground/road standing,
+  import resolution, timer/poll measurement). Closing this needs the whole
+  suite green first, a bigger scope than FIX-5 or FIX-6 together addressed.
+- The disclosed caveat in scripts/mutate-results.mjs's own header: a
+  non-`--resume` `mutate.mjs --all` run still overwrites the whole results
+  file from empty, including any `_mutcheck.mjs`-recorded rows since the
+  last full run. Unchanged, pre-existing behaviour -- sharing a writer did
+  not change mutate.mjs's own fresh-vs-resume semantics, and changing them
+  was not part of this item.

@@ -1,8 +1,17 @@
-// A scratch mutation runner for one test file, used while developing a control.
+// A scoped mutation runner for one test file, checking one source file.
 //
-// `scripts/mutate.mjs` is the real one and runs the WHOLE suite per mutation,
-// which is right for a permanent record and too slow for a tight loop. This
-// rebuilds and runs a single test file instead.
+// `scripts/mutate.mjs` runs the WHOLE suite per mutation -- the strongest
+// baseline, and too slow for a tight loop. This rebuilds and runs a single
+// test file instead, faster, and (FIX-6, PLAN.md §3.6) now records a real,
+// citable result through the SAME writer scripts/mutate.mjs uses
+// (scripts/mutate-results.mjs) -- every result used to be printed to the
+// console and discarded the moment this process exited, which was the other
+// half of Mark's ruling this fix answers: "both tools work properly, or we
+// do not keep both." Every recorded row carries `baselineScope:
+// "scoped:<testFile>"`, distinguishing it from mutate.mjs's own
+// `"full-suite"` rows -- a scoped CAUGHT is real evidence the control
+// catches the mutation, under a narrower guarantee (only this one test file
+// was checked, not the whole suite) than a full-suite CAUGHT gives.
 //
 // It repeats mutate.mjs's hard-won rules, because all were re-learned the
 // expensive way while writing the layout engine:
@@ -34,6 +43,7 @@ import { resolve } from "node:path";
 import { acquireLock, releaseLock, sha } from "./mutate-lock.mjs";
 import { unexpectedFailures } from "./expected-red.mjs";
 import { extractTestTitles } from "./extract-test-titles.mjs";
+import { loadResults, recordResult } from "./mutate-results.mjs";
 
 const [testFile, sourceFile, specFile] = process.argv.slice(2);
 if (!testFile || !sourceFile || !specFile) {
@@ -124,6 +134,21 @@ const onSignal = () => { cleanup(); process.exit(130); };
 process.on("SIGINT", onSignal);
 process.on("SIGTERM", onSignal);
 
+// FIX-6 (PLAN.md §3.6): loaded once, upserted after every mutation (same
+// crash-safety reasoning as mutate.mjs -- a kill must cost one result, not
+// the whole scoped run) via the same scripts/mutate-results.mjs both tools
+// now share.
+const resultsState = loadResults();
+const baselineScope = `scoped:${testFile}`;
+function record(mut, status, extra = {}) {
+  recordResult(resultsState, {
+    ...mut, status, ...extra,
+    measuredAt: new Date().toISOString().slice(0, 10),
+    method: `_mutcheck.mjs ${testFile} vs ${sourceFile}`,
+    baselineScope,
+  });
+}
+
 try {
   const base = run();
   console.log(`baseline: ${base.ok ? "GREEN" : "RED"}`);
@@ -140,17 +165,25 @@ try {
     const hits = original.split(m.find).length - 1;
     if (hits !== 1) {
       console.log(`INCONCLUSIVE  ${m.id}  (find matched ${hits} times, must be exactly 1)`);
+      record(m, "INCONCLUSIVE", { why: `find matched ${hits} times, must be exactly 1`, failing: [] });
       continue;
     }
     writeFileSync(sourceFile, original.replace(m.find, m.replace));
     if (readFileSync(sourceFile, "utf8") === original) {
       console.log(`INCONCLUSIVE  ${m.id}  (the edit did not change the file)`);
+      record(m, "INCONCLUSIVE", { why: "the edit did not change the file", failing: [] });
       continue;
     }
     const r = run();
     const named = r.failed.some((n) => n.includes(m.expect));
-    console.log(`${(!r.ok && named ? "CAUGHT" : !r.ok ? "INCONCLUSIVE" : "SURVIVED").padEnd(12)}  ${m.id}`);
+    const status = !r.ok && named ? "CAUGHT" : !r.ok ? "INCONCLUSIVE" : "SURVIVED";
+    console.log(`${status.padEnd(12)}  ${m.id}`);
     if (!r.ok && !named) console.log(`              red, but not on "${m.expect}": ${r.failed.join(" | ")}`);
+    record(m, status, status === "CAUGHT"
+      ? { failing: r.failed }
+      : status === "INCONCLUSIVE"
+        ? { why: `red, but not on "${m.expect}": ${r.failed.join(" | ")}`, failing: r.failed }
+        : { why: "the suite stayed green with the control broken", failing: [] });
     writeFileSync(sourceFile, original);
   }
 } finally {
