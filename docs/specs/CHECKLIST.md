@@ -68,7 +68,14 @@ resolve a conflict by taking both sides' ticks for their own ids.
     caught itself.
     Gate: evidence that SHOWS the number changing across cells of different
     value. If the original shot was incomplete, say so plainly.
-[ ] FIX-5 (CLI) Purge the old-world mutations and the dead-exports allowlist — PLAN.md 3.5
+[x] FIX-5 (CLI) Purge the old-world mutations and the dead-exports allowlist — PLAN.md 3.5
+    Re-grounded: the brief's "~140 of 185" / "~162-entry" figures were stale
+    (prior sessions had already cleared most of the residue). Real counts:
+    55 of 193 mutations.json entries and 61 of 2,763 allowlist entries
+    targeted deleted/renamed exports. Both purged; every remaining mutation
+    entry names a file that exists. 2 tests cleared (11 failing -> 9):
+    the stale-allowlist test, and expected-red's B2.5 guardrail (its own
+    target, test/boardGenerator.test.ts, was itself quarantined).
     Roughly 140 of 185 entries in `test/mutations.json` target `city-plan.js`,
     `layout.js`, `board-generator.js`, `board-render.js` and siblings — deleted.
     They can only ever report INCONCLUSIVE.
