@@ -1892,6 +1892,22 @@
       "find": "const { board, failures } = loadBoard({ width: AREA_BOARD_WIDTH, height: AREA_BOARD_HEIGHT, catalogue: catalogueById }, save);",
       "replace": "const { board, failures } = { board: createAreaBoard({ width: AREA_BOARD_WIDTH, height: AREA_BOARD_HEIGHT, catalogue: catalogueById }), failures: [] };",
       "expect": "GATE (SHIP-1/reload): loadBoardForArea replays a real save via the real loadBoard()"
+    },
+    {
+      "id": "ship5-deploy-commit-check-must-stay-real",
+      "guards": "SHIP-5 (docs/briefs/BLD-2026-09-17.md): deployCommitClaimMismatch stops reporting a mismatch -- a stale #deploy-commit span would silently pass, exactly the 'manifest nothing checks is decoration' defect this item exists to close.",
+      "file": "src/generatedClaimChecks.ts",
+      "find": "export function deployCommitClaimMismatch(claimedCommit: string, generatedShortCommit: string): string | null {\n  if (!claimedCommit) return \"#deploy-commit is missing from the page\";\n  if (claimedCommit !== generatedShortCommit) {\n    return `page says ${claimedCommit}, generated manifest says ${generatedShortCommit} -- run node scripts/gen-deploy-manifest.mjs`;\n  }\n  return null;\n}",
+      "replace": "export function deployCommitClaimMismatch(claimedCommit: string, generatedShortCommit: string): string | null {\n  return null;\n}",
+      "expect": "(synthetic) a deliberately staled deploy-commit claim is named, not silently absorbed"
+    },
+    {
+      "id": "ship5-deploy-commit-span-must-stay-on-page",
+      "guards": "SHIP-5: the #deploy-commit span id is dropped from public/overview-scene.html -- the manifest would render as a bare, unlabelled value nothing could check, and the whole point of naming this a MANIFEST rather than decoration.",
+      "file": "public/overview-scene.html",
+      "find": "<span id=\"deploy-commit\">",
+      "replace": "<span id=\"deploy-commit-renamed\">",
+      "expect": "GATE (SHIP-5): the page's own #deploy-version/#deploy-commit/#deploy-build-time are not stale against the last real generation"
     }
   ]
 }
