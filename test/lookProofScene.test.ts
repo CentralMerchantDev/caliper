@@ -446,10 +446,23 @@ test("(synthetic) the vulnerability: a comment mentioning buildBoardKerbRing mus
   assert.doesNotMatch(commentOnly, /function buildBoardKerbRing\(ground, groundLayer\)/, "a comment-only mention should not match the real-code pattern once comments are stripped");
 });
 
-test("GATE (FIX-3): the board camera's fog is 14-board.png's real settings -- RC4's narrower per-camera override (100/220) is reverted; BOARD_MODE reads the SAME shared uFogNear/uFogFar (90/230) as every other mode, no caller-side uniform write", () => {
+test("GATE (FIX-3): RC4's own rejected, unmeasured board-camera fog override (uFogNear=100, uFogFar=220 -- NARROWER than shared, the 25-board-scene-pass.png wash) never comes back -- CAM-3's own override below is a real, measured, WIDER one, not a reversion to RC4's", () => {
   assert.doesNotMatch(SCENE_SRC, /material\.uniforms\.uFogNear\.value\s*=\s*100/, "RC4's board-camera fog override (uFogNear=100) is still present -- 25-board-scene-pass.png's rejected wash, judged by Mark as hazier than 14-board.png");
   assert.doesNotMatch(SCENE_SRC, /material\.uniforms\.uFogFar\.value\s*=\s*220/, "RC4's board-camera fog override (uFogFar=220) is still present -- 25-board-scene-pass.png's rejected wash, judged by Mark as hazier than 14-board.png");
-  assert.doesNotMatch(SCENE_SRC, /if\s*\(\s*BOARD_MODE\s*\)\s*\{\s*material\.uniforms/, "BOARD_MODE still writes to material.uniforms after construction -- 14-board.png used the shared construction-time defaults with no per-camera override at all");
+});
+
+// -------------------------------------------------- CAM-3: the haze, measured and fixed
+test("GATE (CAM-3): BOARD_MODE's own uFogFar is widened past the shared 230 -- measured (not guessed) against FIX-1's real ~376m height range, which the shared 230 (tuned for HERO_MODE's own much smaller subjects) fully fogs out well below the top of any real tall piece", () => {
+  assert.match(SCENE_SRC, /if \(BOARD_MODE\) material\.uniforms\.uFogFar\.value = 500;/, "BOARD_MODE's own uFogFar override is missing -- the measured fix (uFogFar 230 -> 500) is not wired");
+});
+
+test("GATE (CAM-3): uFogNear is left untouched -- measured, not the cause (the near ground read correctly at the historical camera's own real ~130m distance, already past uFogNear=90) -- widening it on a guess would be exactly the un-measured retune this item's own brief warns against repeating a fourth time", () => {
+  assert.doesNotMatch(SCENE_SRC, /if \(BOARD_MODE\) material\.uniforms\.uFogNear\.value/, "uFogNear is being overridden for BOARD_MODE -- measurement found it was not the cause of the haze, only uFogFar was");
+});
+
+test("(synthetic) the vulnerability: a comment mentioning uFogFar.value = 500 must not satisfy the checks above", () => {
+  const commentOnly = stripSourceComments("// if (BOARD_MODE) material.uniforms.uFogFar.value = 500; used to be here\nconst m = {};\n");
+  assert.doesNotMatch(commentOnly, /if \(BOARD_MODE\) material\.uniforms\.uFogFar\.value = 500;/, "a comment-only mention should not match the real-code pattern once comments are stripped");
 });
 
 test("GATE (CAM-1): the board camera is no longer positioned before the real board is resolved -- BOARD_MODE's own camera.position.set must not appear in the early, pre-board camera block", () => {

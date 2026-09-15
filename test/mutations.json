@@ -988,11 +988,11 @@
     },
     {
       "id": "fix3-board-fog-override-must-stay-reverted",
-      "guards": "FIX-3 (docs/briefs/BLD-2026-09-16.md): reintroduces RC4's rejected board-camera-only fog override (uFogNear=100, uFogFar=220) that judged 25-board-scene-pass.png hazier than 14-board.png -- BOARD_MODE must go on reading the shared construction-time uFogNear/uFogFar (90/230), no caller-side uniform write.",
+      "guards": "FIX-3 (docs/briefs/BLD-2026-09-16.md): reintroduces RC4's rejected board-camera-only fog override (uFogNear=100, uFogFar=220) that judged 25-board-scene-pass.png hazier than 14-board.png. CAM-3's own real uFogFar=500 override lives alongside this now -- this mutation checks specifically that RC4's own narrower, rejected pair does not come back too. Find text updated to anchor on CAM-3's own real override line (the material-construction anchor this mutation originally used no longer matches, now that CAM-3's own comment/code sits between it and the mesh line).",
       "file": "public/look-proof-scene.html",
-      "find": "  const material = createLookProofMaterial(arrayTex);\n  const mesh = new THREE.Mesh(merged, material);",
-      "replace": "  const material = createLookProofMaterial(arrayTex);\n  if (BOARD_MODE) { material.uniforms.uFogNear.value = 100; material.uniforms.uFogFar.value = 220; }\n  const mesh = new THREE.Mesh(merged, material);",
-      "expect": "GATE (FIX-3): the board camera's fog is 14-board.png's real settings -- RC4's narrower per-camera override (100/220) is reverted; BOARD_MODE reads the SAME shared uFogNear/uFogFar (90/230) as every other mode, no caller-side uniform write"
+      "find": "if (BOARD_MODE) material.uniforms.uFogFar.value = 500;",
+      "replace": "if (BOARD_MODE) { material.uniforms.uFogNear.value = 100; material.uniforms.uFogFar.value = 220; }",
+      "expect": "GATE (FIX-3): RC4's own rejected, unmeasured board-camera fog override"
     },
     {
       "id": "fix3-grd1-board-paving-radius-must-stay-retired",
@@ -1249,6 +1249,14 @@
       "find": "if (Math.abs(dx) > DRAG_THRESHOLD_PX || Math.abs(dy) > DRAG_THRESHOLD_PX) dragState.moved = true;",
       "replace": "dragState.moved = true;",
       "expect": "GATE (CAM-2): drag-to-look is a real gesture, told apart from RC1's own click-to-place by real pixel movement, not layered onto the same event -- a held button with no movement, released, is still a click"
+    },
+    {
+      "id": "cam3-fogfar-must-stay-widened",
+      "guards": "CAM-3 (docs/briefs/BLD-2026-09-18.md): BOARD_MODE's own widened uFogFar reverts to the shared 230 -- measured (not guessed) to fully fog out FIX-1's own real ~376m tall pieces well below their own top, the exact 'objects over-hazed, ground under-blended' defect Mark named on 30-board-scene-pass-fix3.png.",
+      "file": "public/look-proof-scene.html",
+      "find": "if (BOARD_MODE) material.uniforms.uFogFar.value = 500;",
+      "replace": "",
+      "expect": "GATE (CAM-3): BOARD_MODE's own uFogFar is widened past the shared 230"
     }
   ]
 }

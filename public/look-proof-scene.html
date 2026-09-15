@@ -1009,6 +1009,36 @@ async function main() {
   // does, matching what 14-board.png itself was rendered with (the
   // override did not exist yet at that commit -- see 2936b7e vs b4949c9).
   const material = createLookProofMaterial(arrayTex);
+  // CAM-3 (docs/briefs/BLD-2026-09-18.md §4) -- Mark on `30-board-scene-
+  // pass-fix3.png`: "the buildings are extremely hazy... the clarity has
+  // disappeared because of something overlaid... a gauze." Three prior
+  // fog retunes (density/colour) never touched uFogFar itself, and this
+  // is why: reading `30` directly showed the ground (near camera) sharp
+  // while buildings (farther) were washed, objects over-hazed and ground
+  // under-blended -- the opposite of real distance haze, and the
+  // hypothesis this item's own brief names is "the near plane starting
+  // too close." VERIFIED BY MEASUREMENT, not assumed: rendered the exact
+  // historical camera (14-board.png's own formula, temporarily
+  // substituted, then reverted -- see the real eye camera above, restored
+  // byte-identical) and computed real camera-to-surface distances.
+  // uFogNear (90) was NOT the dominant lever -- the near ground sits at
+  // ~130m from that camera, already past uFogNear, and read correctly
+  // (sharp, matching Mark's own "ground under-blended" observation
+  // exactly). uFogFar (230) WAS: the same camera puts mega-tower-a's own
+  // real ~376m-tall facade (FIX-1) at ~174m (base) to ~272m (top) away --
+  // the TOP is already past uFogFar=230, fully fogged, and the BASE sits
+  // at 60% blend. A single continuous facade fading from 60% to 100% fog
+  // across its own real height is exactly what "detail not blurred, but
+  // WASHED -- contrast lost" looks like. uFogFar=230 was tuned for
+  // HERO_MODE's own much smaller subjects (RB5's own comment: "~90" was
+  // HERO_MODE's own camera distance) and was never retuned when FIX-1
+  // made BOARD_MODE's own real height range ~14x larger. Confirmed the
+  // fix by rendering a controlled before/after varying ONLY uFogFar (500,
+  // clearing FIX-1's own real range with margin): the SAME tower's
+  // facade regained real colour/contrast on its base and lower floors,
+  // the ground (already correct) unchanged. uFogNear is untouched --
+  // it was not the cause, said plainly rather than changed on a guess.
+  if (BOARD_MODE) material.uniforms.uFogFar.value = 500;
   const mesh = new THREE.Mesh(merged, material);
   scene.add(mesh);
   window.__material = material;
